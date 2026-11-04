@@ -1,0 +1,14 @@
+{
+  "name": "ai-dev-workflow",
+  "version": "1.0.0",
+  "description": "AI 开发完整工作流：需求定义 → 实现规划 → 确认门 → TDD → 代码审查 → 安全复查 → 收尾。可接入 Claude Code / Codex / Cursor / Copilot / Windsurf / Gemini CLI / Cline / DSH 等工具。",
+  "license": "MIT",
+  "keywords": ["skill", "workflow", "tdd", "code-review", "security-review", "vibe-coding"],
+  "files": [
+    "SKILL.md",
+    "commands/",
+    "adapters/",
+    "scripts/",
+    "README.md"
+  ]
+}
