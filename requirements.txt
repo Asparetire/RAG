@@ -1,0 +1,13 @@
+# 运行时依赖（M0 §0.1 初稿；安装后 pip freeze 锁版本回填，FR-7.2）
+openai                 # 火山 OpenAI 兼容 chat/VLM 流式
+httpx                  # /embeddings/multimodal 直调
+pydantic-settings      # config.py 读 .env
+PyMySQL[cryptography]  # MySQL 8 caching_sha2_password 需要 cryptography
+qdrant-client          # url 模式
+rank-bm25              # BM25 关键词索引
+jieba                  # 中文分词
+numpy
+pillow                 # 图像处理
+fastapi                # M4 服务用，M0 一并锁版
+uvicorn[standard]
+sse-starlette          # SSE 流式
