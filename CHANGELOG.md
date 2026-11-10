@@ -38,5 +38,6 @@
 - 新增 `tests/test_config.py`：4 条配置测试（模型配置 / 存储地址 / 路径常量 / 档位齐全），验收 `pytest tests/test_config.py`。
 - 新增 `scripts/smoke_test.py`（runbook §0.4）：六连测（MySQL/Qdrant 连通、文本/图像嵌入、LLM 重排、VLM 流式），每项打印耗时供成本表；含 `ARK_EMBED_BASE_URL` 探测（coding/v3 → api/v3 顺序）与自动回填 `.env`（M0 决策点①）。
 - 分工：代码由 AI 助手在 Windows 侧编写推送，容器侧 pull 后执行 pytest 与冒烟。
+- 修复：容器内 pytest 报 `ModuleNotFoundError: No module named 'doclens'`——新增 `pytest.ini`（`pythonpath = .` 把仓库根加入测试导入路径，`testpaths = tests`）。
 
 
