@@ -51,4 +51,11 @@
 - SSH 免密打通：Windows ed25519 公钥装入容器 `authorized_keys`，自动化运维不再依赖密码。
 - 待补：成本表三记录（MinerU 安装耗时/模型体积/单篇解析耗时）与方舟定价页数字，凑齐后产出 reports/cost.md 并打 tag 收官。
 
+## 2026-11-10｜env：M0 正式收官（git tag m0）
+
+- 产出 `reports/cost.md`（框架版）：六连测耗时表、M0 三决策点记录、一次性环境成本；按用户决策**不做精确定价核算**（M2 批量嵌入前只观察 Coding Plan 额度余量），定价列留占位、MinerU 三数字标"待补"。
+- M0 完成标准达成：六连测 6/6 全绿 + `git tag m0`。
+- 里程碑翻篇：下一站 M1 文档解析管线（mineru_parser.py 封装 → 语料批量解析 → 切块入库）。
+- 新增会话连续性机制：AGENTS.md 顶部 `Next Action:` 交接锚点 + 收工口令（收工三件事：刷锚点/记账/push）。
+
 
