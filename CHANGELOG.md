@@ -40,4 +40,15 @@
 - 分工：代码由 AI 助手在 Windows 侧编写推送，容器侧 pull 后执行 pytest 与冒烟。
 - 修复：容器内 pytest 报 `ModuleNotFoundError: No module named 'doclens'`——新增 `pytest.ini`（`pythonpath = .` 把仓库根加入测试导入路径，`testpaths = tests`）。
 
+## 2026-11-10｜env：M0 冒烟六连测全绿（6/6），决策点①完成
+
+- **0.3 配置骨架验收通过**：容器内 `pytest tests/test_config.py` 4 passed（pytest.ini 修复后导入路径正常）。
+- **0.4 冒烟六连测 6/6 全绿**：MySQL/Qdrant 连通、文本/图像嵌入（均 2048 维）、LLM 重排（flash 列表式）、VLM 流式生成——每项耗时已记录供成本表。
+- **决策点①结论**：嵌入端点 `coding/v3` 放行 multimodal 路径，`ARK_EMBED_BASE_URL=https://ark.cn-beijing.volces.com/api/coding/v3` 自动回填容器 `.env`（Coding Plan 额度覆盖嵌入，无需退 api/v3 付费通道）。
+- 修复：方舟 multimodal 嵌入响应的 `data` 为**字典**（`{"embedding": [...]}`）而非 OpenAI 风格数组——smoke_test 改为双格式兼容解析。
+- 修复：Qdrant 401——以正在运行的进程（11-05 启动）环境变量为准，把真实密钥同步回容器 `.env`，连通验证通过。
+- 重建 `/home/doclens/start-services.sh`（幂等启动 + API key 从 `.env` 读取），MySQL 8.0.42 / Qdrant 验活通过。
+- SSH 免密打通：Windows ed25519 公钥装入容器 `authorized_keys`，自动化运维不再依赖密码。
+- 待补：成本表三记录（MinerU 安装耗时/模型体积/单篇解析耗时）与方舟定价页数字，凑齐后产出 reports/cost.md 并打 tag 收官。
+
 

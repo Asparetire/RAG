@@ -148,6 +148,22 @@ def _write_back_embed_base(base: str) -> None:
     print(f"   已回填 .env: ARK_EMBED_BASE_URL={base}")
 
 
+# ---------- 嵌入响应解析（双格式兼容） ----------
+def _extract_embedding(body: dict) -> list[float]:
+    """方舟 multimodal 端点返回 `data` 为字典（{"embedding": [...]}），
+    OpenAI 风格返回数组（[{"embedding": [...]}]）——两种都兼容。"""
+    data = body.get("data")
+    if isinstance(data, list) and data:
+        vec = data[0].get("embedding")
+    elif isinstance(data, dict):
+        vec = data.get("embedding")
+    else:
+        vec = None
+    if not vec:
+        raise ValueError(f"响应里找不到 embedding 向量，键: {list(body.keys())}")
+    return vec
+
+
 # ---------- 测试 3：文本嵌入 ----------
 def test_text_embedding():
     body = _post_embedding(
@@ -159,7 +175,7 @@ def test_text_embedding():
             }
         ]
     )
-    data = body["data"][0]["embedding"]
+    data = _extract_embedding(body)
     assert len(data) == settings.embed_dimensions, f"维度 {len(data)} != {settings.embed_dimensions}"
     return f"文本嵌入维度 = {len(data)}（目标 {settings.embed_dimensions}）"
 
@@ -191,7 +207,7 @@ def test_image_embedding():
             }
         ]
     )
-    data = body["data"][0]["embedding"]
+    data = _extract_embedding(body)
     assert len(data) == settings.embed_dimensions, f"维度 {len(data)} != {settings.embed_dimensions}"
     return f"图像嵌入维度 = {len(data)}"
 
