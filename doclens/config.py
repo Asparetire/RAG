@@ -40,13 +40,13 @@ class Settings(BaseSettings):
         extra="ignore",  # .env 中的注释键或未声明键不报错
     )
 
-    # --- 火山方舟（单供应商，全链路一把 key） ---
+    # --- 火山方舟（单供应商，全链路一把 key；Coding Plan 支持第三方模型） ---
     ark_api_key: str = ""
     ark_base_url: str = "https://ark.cn-beijing.volces.com/api/coding/v3"
     ark_embed_base_url: str = ""  # M0 §0.4 冒烟探测后回填（coding/v3 或 api/v3）
     embed_model: str = "doubao-embedding-vision-251215"
     embed_dimensions: int = 2048
-    gen_model: str = "doubao-seed-2-1-pro-260915"
+    gen_model: str = "glm-5.3-flash"  # 原生多模态 VLM，看图+生成（2026-11-10 起，替代 doubao-seed-2.1-pro）
     ctx_model: str = "deepseek-v4-flash"
     rerank_model_flash: str = "deepseek-v4-flash"
     rerank_model_pro: str = "doubao-seed-2-1-pro-260915"

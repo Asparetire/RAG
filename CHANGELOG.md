@@ -57,5 +57,6 @@
 - M0 完成标准达成：六连测 6/6 全绿 + `git tag m0`。
 - 里程碑翻篇：下一站 M1 文档解析管线（mineru_parser.py 封装 → 语料批量解析 → 切块入库）。
 - 新增会话连续性机制：AGENTS.md 顶部 `Next Action:` 交接锚点 + 收工口令（收工三件事：刷锚点/记账/push）。
+- **主力 VLM 换代**：`GEN_MODEL` 由 `doubao-seed-2-1-pro-260915` 改为 `glm-5.3-flash`（用户决策）。依据：火山 Coding Plan 个人版官方模型列表已含 `glm-5.3-flash` 等第三方模型（[快速开始文档](https://docs.volcengine.com/docs/ark/coding-plan-personal-get-started?lang=zh)）——仍是一把 `ARK_API_KEY`、同一 coding/v3 端点，**单供应商架构不破坏**。GLM-5.3-Flash 为原生多模态 VLM（输入支持图像/视频/文件）。同步改动：`.env.example`、本地 `.env`、`config.py` 默认值、`tests/test_config.py` 断言；`RERANK_MODEL_PRO`（doubao-seed-2.1-pro）与 `CTX_MODEL` 不变，原 VLM 保留为重排 pro 对比位。待容器侧重跑冒烟第 6 项验证。
 
 

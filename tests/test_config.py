@@ -14,7 +14,7 @@ def test_model_settings_load() -> None:
     assert isinstance(settings.embed_dimensions, int)
     assert settings.embed_dimensions == 2048
     assert settings.embed_model.startswith("doubao")
-    assert settings.gen_model.startswith("doubao")
+    assert settings.gen_model  # 主力 VLM 非空（现为 glm-5.3-flash，消融对比位仍含 doubao）
     assert settings.ctx_model.startswith("deepseek")
     assert settings.ark_base_url.startswith("https://ark.")
 
