@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://127.0.0.1:6333"
     qdrant_api_key: str = ""
 
+    # --- 解析（MinerU 桥接，m1-runbook 1.3：subprocess 调 doclens-mineru 环境） ---
+    mineru_bin: str = ""        # mineru-kit CLI 绝对路径，两端 .env 各自配置（容器 /opt/...；Windows D:\soft\anaconda\envs\doclens-mineru\Scripts\mineru-kit.exe）
+    mineru_timeout: int = 1800  # 单篇解析超时（秒）
+
 
 settings = Settings()
 
