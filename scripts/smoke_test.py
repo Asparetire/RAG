@@ -265,9 +265,13 @@ def test_vlm_stream():
         timeout=LLM_TIMEOUT,
     )
     for chunk in stream:
-        delta = chunk.choices[0].delta.content if chunk.choices else None
-        if delta:
-            chunks.append(delta)
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        # 兼容"思考型模型"：思考阶段的 token 可能出现在 reasoning_content 而非 content
+        piece = getattr(delta, "content", None) or getattr(delta, "reasoning_content", None)
+        if piece:
+            chunks.append(piece)
     text = "".join(chunks).strip()
     assert text, "VLM 流式输出为空"
     return f"VLM 流式响应 {len(chunks)} 个 chunk: {text[:80]}"

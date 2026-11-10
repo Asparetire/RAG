@@ -58,5 +58,6 @@
 - 里程碑翻篇：下一站 M1 文档解析管线（mineru_parser.py 封装 → 语料批量解析 → 切块入库）。
 - 新增会话连续性机制：AGENTS.md 顶部 `Next Action:` 交接锚点 + 收工口令（收工三件事：刷锚点/记账/push）。
 - **主力 VLM 换代**：`GEN_MODEL` 由 `doubao-seed-2-1-pro-260915` 改为 `glm-5.3-flash`（用户决策）。依据：火山 Coding Plan 个人版官方模型列表已含 `glm-5.3-flash` 等第三方模型（[快速开始文档](https://docs.volcengine.com/docs/ark/coding-plan-personal-get-started?lang=zh)）——仍是一把 `ARK_API_KEY`、同一 coding/v3 端点，**单供应商架构不破坏**。GLM-5.3-Flash 为原生多模态 VLM（输入支持图像/视频/文件）。同步改动：`.env.example`、本地 `.env`、`config.py` 默认值、`tests/test_config.py` 断言；`RERANK_MODEL_PRO`（doubao-seed-2.1-pro）与 `CTX_MODEL` 不变，原 VLM 保留为重排 pro 对比位。待容器侧重跑冒烟第 6 项验证。
+- **GLM 换代验证通过 + 两连修**：容器 `.env` 整文件 scp 覆盖时把 Qdrant 密钥盖回旧值导致 401（已再次以运行进程为准同步，并吸取教训——**两端 `.env` 的差异行今后禁止整文件互拷**，只同步允许变动的行）；冒烟第 6 项偶发"流式输出为空"——根因是 GLM-5.3-Flash 为**思考型模型**（`thinking.type` 仅支持 enabled），流式 chunk 前段是思考内容（出现在 `reasoning_content`），smoke_test 已兼容（content 与 reasoning_content 双累计）。修复后冒烟 **6/6 全绿**。备注：GLM 看图性能优于 doubao（约 4s vs 10.7s）；deepseek-v4-flash 重排偶发长思考（42.78s vs 通常 2-3s），后续观测。
 
 
