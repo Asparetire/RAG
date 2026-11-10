@@ -21,3 +21,22 @@
 - 项目代码迁入容器 `/home/doclens/RAG`（scp 整包，含 .git）。
 - 建立 GitHub 远程仓库 `Asparetire/RAG` 作为 Windows ↔ 容器双端同步的中转站，确立纪律：开工 pull、收工 push、同一文件不两头同时改。
 - 新增本 CHANGELOG；`.gitignore` 追加排除 `.agents/`（AI 助手本地目录）。
+- 修复 Windows 端 `.git` 目录的文件夹权限缺陷（此前 git 写入被拒；原权限已备份，恢复脚本在 `.agents/acl-recovery/`）。
+- 容器端 git 对齐完成：`working tree clean`，HEAD=02d447c，双端同步流程首次跑通。
+
+## 2026-11-10｜env：容器内 MinerU 解析环境搭建完成
+
+- 创建容器 conda 环境 `doclens-mineru`（python=3.12），安装 `mineru>=4.0,<5`（M0 runbook §0.2）。
+- 容器网络限制：pypi.org 直连不可达（Errno 101 Network is unreachable），已把 pip 默认源切换为清华镜像（写入 `/root/.config/pip/pip.conf`，一劳永逸）。
+- 样例 PDF（s41467-025-67998-6，Nature Communications 论文）解析跑通，`data/test/` 产出结构化 Markdown，用户验收通过。
+- 成本三记录（安装耗时 / 模型体积 / 单篇解析耗时）暂缺，待 0.5 成本表环节补录。
+- 位置备注：MinerU 模型与 pip 包分别落在容器 `/root/.cache` 与 `/opt/conda/envs`——容器若重建需重装重下（关联待办：管理员确认持久卷）。
+
+## 2026-11-10｜feat：M0 0.3 配置骨架 + 0.4 冒烟六连测脚本入库
+
+- 新增 `doclens/config.py`（plan D10）：pydantic-settings 读 `.env`、模型名集中、消融阶梯 A–F 常量（PRD §7.1）、路径常量（pathlib 跨平台）、嵌入 Query/Corpus 分侧 instructions 模板（runbook §0.4）。
+- 新增 `tests/test_config.py`：4 条配置测试（模型配置 / 存储地址 / 路径常量 / 档位齐全），验收 `pytest tests/test_config.py`。
+- 新增 `scripts/smoke_test.py`（runbook §0.4）：六连测（MySQL/Qdrant 连通、文本/图像嵌入、LLM 重排、VLM 流式），每项打印耗时供成本表；含 `ARK_EMBED_BASE_URL` 探测（coding/v3 → api/v3 顺序）与自动回填 `.env`（M0 决策点①）。
+- 分工：代码由 AI 助手在 Windows 侧编写推送，容器侧 pull 后执行 pytest 与冒烟。
+
+
