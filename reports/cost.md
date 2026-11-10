@@ -9,9 +9,9 @@
 |---|---|---|
 | M0 总工期 | 3 天（11-08 ~ 11-10） | 含拓扑切换（PyCharm → VS Code）与踩坑修复 |
 | 容器 Miniconda + doclens 环境 | 11-08 完成 | conda 26.3.2 |
-| MinerU 环境（doclens-mineru） | 安装耗时：**待补** | pip 清华镜像；含数百依赖包 |
-| MinerU 模型下载体积 | **待补**（可用 `du -sh ~/.cache` 估） | basic tier |
-| 单篇 PDF 解析耗时 | **待补**（样例 s41467-025-67998-6 实测过，数字未记录） | 记录到秒级即可 |
+| MinerU 环境（doclens-mineru） | 安装耗时：**未记录**（用户确认无法回忆，2026-11-10） | pip 清华镜像；含数百依赖包 |
+| MinerU 模型下载体积 | **2.0 GB**（onnx 819M + GGUF 1.2G，2026-11-10 实测 `du -sh /root/.mineru`） | basic tier；落 `/root/.mineru/models/` |
+| 单篇 PDF 解析耗时 | **待补**（M1 1.3 验收时以 10 篇实测回填） | 记录到秒级即可 |
 
 ## 2. 冒烟六连测耗时（M0 §0.4 实测，容器内）
 
