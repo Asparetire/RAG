@@ -4,6 +4,7 @@
 > **规划依据**：[PRD v2.0（已确认）](../prds/doclens-multimodal-rag.prd.md)、[调研笔记](../research/eval-and-retrieval-survey.md)（技术细节与来源）
 > **范围**：项目整体（M0–M6 全里程碑）；批准后按里程碑逐个实施，每个里程碑完成即 git 打标签
 > **修订（2026-11-05，共 5 轮）**：① 模型侧——嵌入/生成/上下文增强切火山方舟（doubao-embedding-vision-251215 单模型统一文本/图像；D3/D7/D8）；② 存储侧——Qdrant server + MySQL 服务器原生部署（无 Docker），弃 local mode + SQLite（D4/D10）；③ 拓扑——服务器仅承载存储（容器环境：无 Docker、apt 可用），本地运行应用 + git 私有远端，`.env` 指向服务器端点（D13）；④ 重排侧——D6 重写为方舟 LLM 列表式重排（flash vs pro 对比 + 视觉逐图打分），**SiliconFlow 全部移除**，PRD FR-3.2 同步修订（v2.1）——全项目只剩一把 ARK key
+> **修订⑥（2026-11-10，M1 立项时补记）**：执行拓扑再变更——应用代码与 Python 环境改在**服务器容器内运行**（VS Code Remote-SSH 直达容器，2026-11-09 起），D13 的"本地运行应用"不再成立：容器内 `127.0.0.1` 直连 MySQL/Qdrant，Windows 侧仅作代码编辑与 git 中转；M1 语料决策改为**自选领域论文**（1.1 由 arXiv 自动下载改型为 `scripts/corpus_intake.py` 校验入库 + 两层去重），主力 VLM 换代 `glm-5.3-flash`（D7 模型名，架构不变）。详见 m1-runbook.md。
 
 ---
 

@@ -233,7 +233,7 @@ MP-DocVQA / M3DocVQA（端到端）、ViDoRe（检索层）、FinanceBench（财
 
 | 约束 | 内容 |
 |---|---|
-| 环境 | Windows 11、无 GPU、API-only（火山方舟） |
+| 环境 | Windows 11、无 GPU、API-only（火山方舟）。**执行拓扑（2026-11-09 修订，runbook 修订⑥）**：应用代码与 Python 环境运行于服务器容器（SSH `root@10.14.50.123` 直达），Windows 侧仅作代码编辑与 git 中转；存储（MySQL/Qdrant）同在容器内 `127.0.0.1` 直连；最终交付仍需在 Windows 11 克隆跑通（FR-7.1），代码保持跨平台 |
 | 工期 | 2–3 周业余时间（每天 1–3 小时）：P0 全做 + 部分 P1 |
 | 语言 | 中文提问 + 英文文档语料；界面支持中英 |
 | 命名与栈默认（已确认） | 项目名 DocLens；开发期轻量调试界面、最终交付正式演示前端；Python 3.12 |
