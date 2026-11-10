@@ -20,6 +20,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# 支持 `python scripts/corpus_intake.py` 直接执行：把仓库根加进模块搜索路径
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from doclens.config import DATA_DIR
 
 MIN_PDF_BYTES = 10 * 1024  # 正常论文 PDF 远大于此；兜底空文件/损坏文件
