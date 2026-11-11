@@ -51,7 +51,9 @@ def _gen_one(client: OpenAI, doc_title: str, chunk: dict) -> str:
     return _answer_text(resp.choices[0].message)
 
 
-def _prefix_get_existing(chunk_ids: list[str]) -> set[str]:
+def _prefix_get_existing(chunk_ids: list[str], model: str) -> set[str]:
+    """已有前缀的 chunk_id 集合——**仅统计当前 model 产的**（S3 Major-2：换 ctx_model 后
+    旧前缀必须重生成，否则 E 档数据静默污染；对齐 K4 嵌入缓存把 model 纳键的纪律）。"""
     if not chunk_ids:
         return set()
     conn = connect()
@@ -61,7 +63,10 @@ def _prefix_get_existing(chunk_ids: list[str]) -> set[str]:
             for i in range(0, len(chunk_ids), 500):
                 batch = chunk_ids[i:i + 500]
                 ph = ",".join(["%s"] * len(batch))
-                cur.execute(f"SELECT chunk_id FROM t_ctx_prefix WHERE chunk_id IN ({ph})", batch)
+                cur.execute(
+                    f"SELECT chunk_id FROM t_ctx_prefix WHERE chunk_id IN ({ph}) AND model = %s",
+                    [*batch, model],
+                )
                 existing.update(r[0] for r in cur.fetchall())
         return existing
     finally:
@@ -92,7 +97,9 @@ async def generate_prefixes(doc_title: str, chunks: list[dict], *,
     """
     loop = asyncio.get_running_loop()
     client = OpenAI(api_key=settings.ark_api_key, base_url=settings.ark_base_url)
-    existing = await loop.run_in_executor(None, _prefix_get_existing, [c["chunk_id"] for c in chunks])
+    existing = await loop.run_in_executor(
+        None, _prefix_get_existing, [c["chunk_id"] for c in chunks], settings.ctx_model
+    )
     todo = [c for c in chunks if c["chunk_id"] not in existing]
     done: dict[str, str] = {}
     if todo:

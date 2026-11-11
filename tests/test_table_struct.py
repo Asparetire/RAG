@@ -173,5 +173,30 @@ def test_excluded_structure_fields():
         assert set(e.keys()) == {"where", "type", "reason", "disposition"}
 
 
+def test_total_row_excluded_and_kept_at_tail():
+    """runbook §6 点名夹具：Average/Total 合计行 → 排除出数据区 + 保留至尾部（S3 审查补测）。"""
+    html = (
+        "<table><tr><td>Method</td><td>Score</td></tr>"
+        "<tr><td>Base</td><td>80.1</td></tr>"
+        "<tr><td>Ours</td><td>85.3</td></tr>"
+        "<tr><td>Average</td><td>82.7</td></tr>"
+        "</table>"
+    )
+    content, man = transform_table({"content": html}, caption=None, page=1, order=8)
+    total_ex = [e for e in man["excluded"] if e["type"] == "total"]
+    assert len(total_ex) == 1 and "Average" in total_ex[0]["reason"]
+    assert total_ex[0]["disposition"] == "保留至 chunk 尾部（汇总行）"
+    assert man["n_rows_clean"] == 2  # 数据行只剩 Base/Ours
+    assert "82.7" not in content.split("汇总行")[0]  # 汇总值不在正文数据区
+    assert "汇总行：| Average | 82.7 |" in content  # 尾部保留（可检索）
+    # 中文合计同样命中
+    content2, man2 = transform_table(
+        {"content": "<table><tr><td>方法</td><td>得分</td></tr><tr><td>合计</td><td>90</td></tr></table>"},
+        caption=None, page=1, order=9,
+    )
+    assert [e["type"] for e in man2["excluded"]] == ["total"]
+    assert "汇总行" in content2
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
