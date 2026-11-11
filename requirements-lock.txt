@@ -1,7 +1,11 @@
 # DocLens 传递依赖全量锁定（FR-7.2）——2026-11-11 由容器 doclens 环境（默认拓扑执行环境）
 # `pip freeze` 生成；qdrant-client 钉 1.15.1 对齐服务器（详见 requirements.txt 头注）。
+# 修正（2026-11-11 集成验收）：httpx2/httpcore2 是 openai 3.48 的真实依赖（pip show Requires 可证），
+# 初版误判"冗余包"移除导致容器 openai 不可导入——已恢复，勿再删。
 # 重装环境：pip install -r requirements-lock.txt（或先 requirements.txt 再本文件兜底）。
 CacheControl==0.14.4
+httpcore2==2.16.0
+httpx2==2.16.0
 PyMySQL==1.2.4
 PyYAML==6.0.3
 Pygments==2.21.0
