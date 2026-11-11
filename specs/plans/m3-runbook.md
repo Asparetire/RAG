@@ -1,8 +1,8 @@
 # M3 检索+生成 Runbook
 
-> **状态：待确认（停在确认门 G1）** ｜ slug：`m3-retrieval-generation` ｜ 依据：[主计划 §5 M3](doclens-multimodal-rag.plan.md)、[PRD FR-3/FR-4/NFR](../prds/doclens-multimodal-rag.prd.md)、[m2-runbook](m2-runbook.md)（M2 产物即 M3 原料）、[m3 调研笔记](../research/m3-retrieval-generation-survey.md)（R1–R19，工程实践级）、[检索方法调研](../research/eval-and-retrieval-survey.md)（方法级已定约束）
-> **体检输入（2026-11-11 本机环境体检，6/6 全通）**：① Windows GBK 编码坑（✅❌ 打印崩溃，PYTHONUTF8=1 已验证）；② qdrant-client 1.20.0 vs 服务器 1.15.4 版本偏移；③ glm-5.3-flash 强制思考、reasoning_content 泄漏活证据；④ .env 双端漂移实锤（QDRANT_API_KEY 已同步修复）；⑤ httpx2 冗余包——全部并入 §2/§3/§5
-> **用户决策（待 G1 确认）**：实现方式默认延续普通实现（M2 决策④同款）
+> **状态：已收官（2026-11-11 tag m3）** ｜ slug：`m3-retrieval-generation` ｜ 依据：[主计划 §5 M3](doclens-multimodal-rag.plan.md)、[PRD FR-3/FR-4/NFR](../prds/doclens-multimodal-rag.prd.md)、[m2-runbook](m2-runbook.md)（M2 产物即 M3 原料）、[m3 调研笔记](../research/m3-retrieval-generation-survey.md)（R1–R19，工程实践级）、[检索方法调研](../research/eval-and-retrieval-survey.md)（方法级已定约束）
+> **体检输入（2026-11-11 本机环境体检，6/6 全通）**：① Windows GBK 编码坑（✅❌ 打印崩溃，PYTHONUTF8=1 已验证，后续代码级 reconfigure 修复）；② qdrant-client 1.20.0 vs 服务器 1.15.4 版本偏移（收官处置：钉 1.15.1——1.15.4 需 Py<3.12 不可用，K9 事实修正）；③ glm-5.3-flash 强制思考、reasoning_content 泄漏活证据（K5 双字段分流落地）；④ .env 双端漂移实锤（QDRANT_API_KEY 已同步，AGENTS 勘误完成）；⑤ httpx2 初判冗余**后证伪**（openai 3.48 真实依赖，误删致容器 openai 不可导入，已恢复+lock 头注警示）——⑤为体检中唯一误判，教训记录。
+> **收官修订（2026-11-11，集成实测回填）**：J-1 重排延迟定案（真实 30 候选 4s~110s+ 方差，timeout 5s→30s+降级+缓存为稳态设计，M5 带降级率口径）；S3 审查 B-1（组员展开丢失重排输出）修复 + J-2/Minor 分级处置（随批修 3，余入 M5）；见 [S3 审查](../reviews/m3-retrieval-generation.review.md)、[S4 复查](../reviews/m3-retrieval-generation.security.md)。
 
 ---
 

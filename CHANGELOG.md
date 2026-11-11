@@ -103,4 +103,34 @@
 - **G1 批准**：2026-11-11 14:54，指令「开始M2的发开工作 保证工作质量」→ 普通实现（S2'），收官走 S3 代码审查 + S4 安全复查 + tag m2。
 - 环境侦察：解析原料在容器 `/home/doclens/RAG/data/parsed/`（11 篇，doc.json + structured_content.json + middle_json.json + images/ 齐备）；Windows 经 SSH 免密直连容器执行；调研残留临时目录 `_tmp_research` 已清理。
 
+## 2026-11-11｜env：本机体检 + 双端同步链路升级（M3 前置）
+
+- **本机环境体检 6/6 全通**（"本机服务 + 服务器存储"拓扑实证）：Windows doclens 环境（Python 3.12.16、依赖齐）→ SSH 隧道（本机 13306→容器 MySQL、16333→Qdrant，SSH 8009 免密）→ 冒烟六连测全绿。3306/6333 未对外发布的 S4-02 边界不变。
+- **体检五发现**：①Windows 控制台 GBK 编码坑（✅❌ 崩溃，PYTHONUTF8=1 解，后续代码级 reconfigure）；②qdrant-client 1.20.0 vs 服务器 1.15.4 版本偏移；③GLM-5.3-FLASH 强制思考、reasoning_content 泄漏活证据；④.env 双端漂移（Qdrant key 过期 401，已同步）；⑤httpx2 疑似冗余包（后证伪，见下）。
+- **git 双端同步升级**：git bundle 走 SSH 通道把容器从 M1 时代 HEAD（M2 代码为 30 个 scp 未跟踪文件）对齐到 master；容器配 `receive.denyCurrentBranch=updateInstead` + Windows 加 `server` 远端 → **`git push server master` 一条命令同步容器工作区**（M2 遗留③闭环，scp 同步作废）。
+
+## 2026-11-11｜docs：M3 立项（runbook + 调研过 G1 确认门）
+
+- 同类项目调研 `specs/research/m3-retrieval-generation-survey.md`（混合检索/LLM 重排/带据生成三线，39 条编号来源）：R1–R19 修订清单——客户端 RRF 定稿、证据组归并、RankGPT 三级解析链、强制思考适配、ALCE 引用语义、不做全局分数阈值、trace JSONL 对齐 F0–F6 等。
+- 新增 `specs/plans/m3-runbook.md`：K0–K9 决策（S3 清障批首项/融合器可插拔/重排降级预案/图文交错组装/双信号兜底/档位注册表）+ 分步任务 + 风险表。
+- **G1 批准**：2026-11-11 19:51，指令「开始吧 完成M3 保证质量」→ 普通实现（S2'），收官走 S3+S4 双审 + tag m3。
+
+## 2026-11-11｜feat：M3 检索+生成里程碑收官（git tag m3）——六档全通、三轮冒烟迭代
+
+- **0.1 S3 清障批**：M2 审查 13 条 Minor 全修（m-4 编号型 References / m-5 表头 drop_cols 列对齐 / m-10 嵌入批内失败落缓存 / m-11 contextual 失败隔离+重试等）+ n-9/n-15 + 补记，65→75 tests。
+- **0.2 工程卫生**：requirements 全量锁版（qdrant-client 钉 1.15.1 对齐服务器——1.15.4 需 Py<3.12 不可用，runbook K9 事实修正）+ **pip-audit（OSV 源）71 包无已知漏洞** + AGENTS/.env.example 存储约定勘误（Windows 场景=SSH 隧道 127.0.0.1）+ 20 冒烟题集版本化（scripts/smoke_queries.json：文本 6/图表 5/表格 5/不可回答 4，中英对照 3 对）。
+- **3.1 hybrid.py**：三路召回（每路 30）→ 客户端 RRF（k=2，可插拔 rrf/weighted_rrf/dbsf 三融合器，M5 加档零改动）→ **证据组归并**（RRF 后重排前，(doc,page)+图组并查集跨页归并，代表=最高分、组员随代表）→ 融合池 top-50；TIER_KINDS 单源映射防消融口径漂移。
+- **3.2 rerank.py**：LLM 列表式重排（输入截 30/每候选 300 词/temp 0）+ RankGPT 三级解析链（清洗→去重→越界过滤+缺失补尾）+ 失败降级回 RRF 序（degraded 入 trace）+ t_rerank_cache 结果缓存 + pro 级联辅助 cascade_input。
+- **3.3 router.py**：中文字符占比 ≥0.3 判 zh → BM25 路旁路（D11）；语言字段入 trace。
+- **3.4 生成四件套**：context（Source N 编号+图文按 Source 交错+图 ≤5 选图）、vlm（GLM-5.3-FLASH 强制思考**双字段分流**——reasoning 只落 trace 绝不进答案、TTFT=正文首 token 口径）、citations（[1]/[1,2]/[1][2]/[1-3] 四类全兼容，规避 ALCE 漏 [1,2] 之坑；无效 n 整句降级标记不静默删；[n]→(doc,page,bbox) 映射）、fallback（judge 上下文充分性双信号+固定话术拒答，**不做全局分数阈值**——分数不可跨查询比较）。
+- **3.5 query_cli.py + trace.py**：端到端编排（路由→三路→重排→组装→兜底→生成→引用映射）+ `--profile A..F` 档位注册表（dataclass，含召回旋钮）+ `--smoke` 自动验收报告（人工判定列+trace_id 回放）+ JSONL 子事件流 trace（字段对齐 F0–F6 归因）。
+- **集成实测（容器）**：检索 85–143ms（P95<2s 达标）；**D 档三轮冒烟迭代**——第一轮 4 题图表/表格误拒 → 归因两连修（judge 提示词补"表格文本化/图注即证据本体"指引 + 重排后组员就地展开跟随代表）；s15 出题缺陷修正（柱状图数字仅存在于图中不可文本化）；**终局：可回答 16/16 出答案 + 不可回答 4/4 拒绝**；A/B/C/E/F 档对照全通 + `--rerank-pro` 级联对比位可用。
+- **J-1 定案（重排延迟）**：受控实验——3 候选 4.0s / 30 候选×300 词 110.6s（成功）/ 20 候选 >120s 超时；强制思考模型列表式重排延迟 4s~110s+ 方差不可控。稳态设计 = timeout 30s + 降级回 RRF 序 + 缓存永久复用（越跑越厚）；**M5 消融 D 档解读必须带降级率口径**；NFR"首 token<5s"需按 R9 口径校准（正文首 token，思考除外）——修订提案随收官提交。
+- **S3 独立代码审查**（`specs/reviews/m3-retrieval-generation.review.md`）：Blocker 1 / Major 2 / Minor 8 / Nit 12——**B-1（组员展开重构丢失重排输出）已修**（f0b2b85）、J-1 终局定案（受控实验三数据入 cost.md）、J-2（image 先序图文配对）与 Minor 分级：随批修 3（S4-10 脱敏正则、S4-15 空召回守卫、--smoke 单一事件循环），其余记 M5/待办池。
+- **S4 安全复查**（`specs/reviews/m3-retrieval-generation.security.md`）：结论**通过**（Critical 0/High 0/Medium 0）——trace 落盘面无凭据（源码断言防回归）、SQL 全参数化、提示注入暴露面评级 Info（无工具无写操作，M4 服务化时升格复查）、S4-10 脱敏缺口与 S4-15 守卫已顺手修（170 passed）。
+- **修正一次误判**：httpx2/httpcore2 非冗余包，系 openai 3.48 真实依赖（`pip show openai` Requires 实证）——误删曾致容器 openai 不可导入，已恢复并写入 lock 文件头注。
+- **测试**：Windows + 容器双端 **170 passed**（65 存量 + 105 新增）；openai 双端对齐 3.48.0（Windows 走清华镜像）。
+- 待办移交：①D 档冒烟报告人工判定列（用户过目 gold_hint）；②J-2/Minor 清单入 M5；③NFR 口径修订提案（首 token）；④125 表人工审计（M2 遗留，持续）。
+
+
 

@@ -156,7 +156,7 @@ doclens/
 | 2.5 | `contextual.py`（E 档）：块前缀生成 + 缓存 + 100 块分层试产 | 100 块生成成本与耗时入核算表 | doclens/index |
 | 2.6 | `ingest.py` 全量/增量入口（doc 级跳过 + 先删后插）+ `search_probe.py` | 11 篇入库；重跑零 API；抽查 10 查询 top-5 相关 | scripts |
 
-### M3 检索 + 生成 CLI（2 天）
+### M3 检索 + 生成 CLI（2 天；2026-11-11 实施收官——0.x 清障与工程卫生 +0.5 天，trace.py 为计划外新增）
 | 步 | 任务 | 验收 | 影响面 |
 |---|---|---|---|
 | 3.1 | `hybrid.py` 三路召回 + RRF + 去重（含单测） | 融合结果合理 | doclens/retrieve |
@@ -164,6 +164,8 @@ doclens/
 | 3.3 | `router.py` 语言检测与路由 | 中文查询走 dense 主路（单测） | doclens/retrieve |
 | 3.4 | `context.py` + `vlm.py` + `citations.py` + `fallback.py` | 引用可解析；兜底可触发 | doclens/generate |
 | 3.5 | `query_cli.py --profile A..F` | 20 冒烟题人工通过率 ≥80% | scripts |
+
+> 收官补记（2026-11-11）：新增 `doclens/trace.py`（JSONL 子事件流 trace，F0–F6 归因用，主计划未列）；`scripts/init_db.py` 增第 6 张表 t_rerank_cache；`config.py` 增 Profile/PROFILES 档位注册表；`search_probe.py` 保留作 M5 对照工具（抽查职责被 hybrid 取代但文件不删）；S3 审查 B-1/J-1 修复记录见 m3-runbook 状态头。M3 验收：D 档 20 题可回答 16/16 + 不可回答拒绝 4/4（冒烟报告 reports/smoke_D.md、smoke_A.md），六档全通 + --rerank-pro 级联位可用。
 
 ### M4 服务 + UI（2–3 天）
 | 步 | 任务 | 验收 | 影响面 |
