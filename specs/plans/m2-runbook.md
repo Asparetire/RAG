@@ -35,7 +35,7 @@
 |---|---|---|---|
 | K1 | **切块粒度**（M2 首要决策） | **节内聚合**：同 `heading_path` 的连续 text 块合并成 800–1600 字符 chunk（约 300–500 token；目标区间非硬限——短节独立成块，宁短勿跨节）；超限按句切分（单句超限硬切）；标题块不单独入库（作 heading 前缀，不计入字符预算）；跨节不合并。**内容过滤**：References/Bibliography 节不入库；页眉页脚/碎片块按重复性判定丢弃——无标题归属且跨页重复出现 >1 次才删，单次出现保留（RAGFlow 先例，防误删正文，调研 R1）。表格 = 1 chunk（表格卡片 + 清洗后 markdown，见 K2）；图片 = caption 文本 chunk（kind=caption）。细则见 §3.1 | Block 直接入库：双栏论文碎片块太多（"Article"/"Received:..."），检回即噪声；整节巨块：超过嵌入输入上限且稀释语义；不过滤 References：引用条目 BM25 高频误召回，污染检索体验 |
 | K2 | 表格 v2 = **结构理解管线**（规则版） | 新增 `doclens/parse/table_struct.py`，四步：① `html.parser` 网格化——rowspan/colspan 复制补全对齐网格（v1 正则丢属性，实为重写）；② **无效区域规则标记**——空白格 / 分隔行 / 脚注行（Note、注：、\*、† 前缀）/ 合计行（Total、Average、Mean、合计、小计、总计）/ 全宽说明行 / 分组带；③ **清洗后的网格**上判定（先扫地再认门牌）——列名 = 顶部连续表头行逐列拼接（`一级/二级`），行名列 = 首列非数字 + 高唯一度；判定从保守，宁漏拼不错拼；④ 每表输出 **manifest**（columns / row_labels / excluded+理由+去向）随 doc.json 落盘。**排除分级**：空白/分隔丢弃；表注/合计行不当结构、但保留至 chunk 尾部。从缓存 raw JSON 重建 doc.json（不重跑 MinerU） | LLM/VLM 仲裁：留待财报泛化包（中文表格噪声更杂，届时做规则 vs LLM 对比位），M2 英文表 125 张规则可覆盖且可全量人工审计；保留 HTML 原文进 Block：raw 已落盘可回溯，模型层不冗余 |
-| K3 | 嵌入 | 单条请求 + asyncio 并发（并发 4，指数退避重试 3 次）；文本用 `CORPUS_TEXT_INSTRUCTION`，图像用 `CORPUS_IMAGE_INSTRUCTION` + base64（单图单请求，D3 既定） | 批量接口：coding/v3 multimodal 未验证 batch，探针再议 |
+| K3 | 嵌入 | 单条请求 + asyncio 并发（**实测收敛为并发 2**——2026-11-11 S3 审查补记 n-4：`CONCURRENCY=2`，实测 4 触发账号级 429 限流，依据在代码注释）；文本用 `CORPUS_TEXT_INSTRUCTION`，图像用 `CORPUS_IMAGE_INSTRUCTION` + base64（单图单请求，D3 既定） | 批量接口：coding/v3 multimodal 未验证 batch，探针再议 |
 | K4 | 嵌入缓存 | MySQL `t_embed_cache`：键 = sha256(model+instruction+dim+content)，MEDIUMBLOB 存向量（float32→bytes）。先查缓存再调 API——增量与消融重跑都省钱 | 文件缓存：SQL 便于 M5 评测时按键统计 |
 | K5 | Qdrant | 两集合：`doclens_text`（2048, cosine, payload: doc_id/chunk_id/kind/page/heading_path）、`doclens_image`（payload: doc_id/image_path/page/caption/bbox）。**点 ID = uuid5(chunk_id)，upsert 幂等**。A 档与 B 档差异用 kind 过滤实现（A=text，B=text+table+caption），不建多余集合；text 集合的正文/bbox 不进 payload，走 t_chunk 回表（§3.1） | 每档一集合：维护翻倍，payload 过滤足够 |
 | K6 | BM25 | rank-bm25 + jieba（`jieba.lcut` 中英通吃，小写化）；索引落 `data/bm25/`（**pickle 存分词语料** + chunk 元数据 jsonl）；增量 = 从 t_chunk 加载语料重建 BM25Okapi（对象不可 extend，IDF 随语料重算） | Qdrant sparse：调优面大（D5 既定） |
@@ -64,6 +64,7 @@
 | 新增 | `scripts/init_db.py` | 5 张表幂等创建（2.2） |
 | 新增 | `scripts/ingest.py` | 全量/增量编排入口：doc 级跳过 / 先删后插 + 收尾汇总（2.7） |
 | 新增 | `scripts/search_probe.py` | 10 查询抽查工具（2.7；查询清单版本化存 **scripts/probe_queries.json**——data/ 被 gitignore、验收资产需入库，收官补记路径变更；M3 被 hybrid 取代） |
+| 新增 | `scripts/rebuild_docs.py` | 表格 v2 缓存重建 11 篇 + tables_manifest.json 落盘（2.0；S3 审查补记漏项，2026-11-11 补记 n-17；同日 a9f28cc 入库"仓库根路径自举"补丁支持直接执行） |
 | 新增 | `scripts/rebuild_docs.py` | 表格 v2 缓存重建 11 篇 + tables_manifest.json 落盘（2.0；S3 审查补记漏项） |
 | 修改 | `scripts/quality_report.py` | 表格 manifest 审计汇总（2.0） |
 | 新增 | `tests/test_table_struct.py`、`tests/test_chunker.py` 等 | 每模块关键路径单测（表格夹具取真实难表） |

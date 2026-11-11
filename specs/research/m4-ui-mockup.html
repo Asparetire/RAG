@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocLens M4 UI 原型（静态演示 · 无后端）</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --card:#ffffff; --line:#e2e6ec; --ink:#1b2330; --muted:#69748233;
+    --brand:#2456e6; --brand-weak:#e9efff; --ok:#0d9463; --warn:#b4540a; --think:#8a93a3;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:#1b2330;font-size:14px}
+  header{height:52px;display:flex;align-items:center;gap:14px;padding:0 16px;background:#101726;color:#fff}
+  header .logo{font-weight:700;font-size:16px}
+  header .beta{font-weight:400;font-size:12px;opacity:.65;margin-left:8px}
+  header .spacer{flex:1}
+  header label{font-size:12px;opacity:.85}
+  header select{margin-left:6px;border-radius:6px;border:1px solid #3a465c;background:#1c2740;color:#e8ecf5;padding:4px 6px}
+  header button{border:1px solid #3a465c;background:#1c2740;color:#dfe6f3;border-radius:6px;padding:5px 10px;cursor:pointer}
+  header button:hover{background:#27334f}
+
+  .app{display:grid;grid-template-columns:minmax(460px,1fr) minmax(430px,1fr);gap:12px;padding:12px;height:calc(100vh - 52px)}
+  .col{display:flex;flex-direction:column;gap:10px;min-height:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px}
+
+  /* 阶段进度条 */
+  .stages{display:flex;align-items:center;gap:6px;padding:9px 14px;flex-wrap:wrap}
+  .stage{display:flex;align-items:center;gap:6px;color:#98a1ad;font-size:13px}
+  .stage i{font-style:normal;width:18px;height:18px;border-radius:50%;background:#e6e9ee;color:#98a1ad;
+    display:inline-flex;align-items:center;justify-content:center;font-size:11px}
+  .stage em{font-style:normal;font-size:11px;color:#0d9463}
+  .stage.active{color:#1b2330;font-weight:600}
+  .stage.active i{background:var(--brand);color:#fff;animation:pulse 1.2s infinite}
+  .stage.done{color:#0d9463}
+  .stage.done i{background:#0d9463;color:#fff;animation:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  .stages .arrow{color:#c3cad3}
+  .stages .total{margin-left:auto;font-size:12px;color:var(--muted)}
+  .stages .total.ok{color:var(--ok);font-weight:700}
+
+  /* 对话区 */
+  .chat{flex:1;min-height:0;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+  .hint{color:#697482;font-size:12.5px;line-height:1.6}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{border:1px solid var(--line);background:#f8fafc;border-radius:16px;padding:5px 12px;cursor:pointer;font-size:12.5px}
+  .chip:hover{border-color:var(--brand);color:var(--brand);background:var(--brand-weak)}
+  .chip small{color:#8a93a3;margin-left:6px}
+  .bubble-q{align-self:flex-end;max-width:85%;background:var(--brand);color:#fff;border-radius:12px 12px 3px 12px;padding:9px 13px}
+  .bubble-a{align-self:flex-start;max-width:94%;border:1px solid var(--line);border-radius:12px 12px 12px 3px;padding:11px 14px;background:#fbfcfe}
+  .think{border:1px solid #e6e9ee;background:#f6f7f9;border-radius:8px;margin-bottom:10px;overflow:hidden}
+  .think .thead{display:flex;align-items:center;gap:7px;padding:7px 11px;color:var(--think);font-size:12.5px;cursor:pointer;user-select:none}
+  .think .tbody{padding:2px 12px 9px;color:var(--think);font-size:12.5px;line-height:1.7;white-space:pre-wrap}
+  .think.collapsed .tbody{display:none}
+  .think .arrow{margin-left:auto;font-size:11px}
+  .atext{line-height:1.85;white-space:pre-wrap}
+  sup.cite{cursor:pointer;color:var(--brand);font-weight:700;padding:0 2px}
+  sup.cite:hover{background:var(--brand-weak);border-radius:4px}
+  sup.cite.invalid{color:#c0392b;text-decoration:line-through;cursor:help}
+  .fallback{margin-top:8px;border-left:3px solid var(--warn);background:#fdf6ef;color:#7c4a11;
+    padding:7px 10px;border-radius:0 6px 6px 0;font-size:12.5px}
+  .citebadge{margin-top:8px;font-size:12px;color:#697482}
+  .citebadge b{color:var(--ok)}
+  .citebadge b.bad{color:#c0392b}
+
+  .askrow{display:flex;gap:8px;padding:10px}
+  .askrow input{flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:14px}
+  .askrow input:focus{outline:2px solid var(--brand-weak);border-color:var(--brand)}
+  .askrow button{border:0;background:var(--brand);color:#fff;border-radius:8px;padding:0 20px;cursor:pointer;font-size:14px}
+  .askrow button:disabled{opacity:.5;cursor:not-allowed}
+
+  /* SSE 事件流抽屉 */
+  .log{max-height:190px;display:flex;flex-direction:column}
+  .loghead{display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid var(--line);font-size:12px;color:#697482}
+  .loghead button{margin-left:auto;border:1px solid var(--line);background:#fff;border-radius:6px;padding:2px 8px;cursor:pointer;font-size:11px}
+  .log pre{margin:0;padding:8px 12px;overflow:auto;font-size:11.5px;line-height:1.55;font-family:Consolas,Menlo,monospace;color:#3d4553}
+  .log .ev{color:#2456e6;font-weight:700}
+
+  /* 右栏：tabs */
+  .tabs{display:flex;gap:4px;padding:6px 8px 0}
+  .tab{border:1px solid transparent;border-bottom:0;background:transparent;border-radius:8px 8px 0 0;
+    padding:7px 14px;cursor:pointer;font-size:13px;color:#697482}
+  .tab.active{background:#fff;border-color:var(--line);color:#1b2330;font-weight:600}
+
+  .sources{flex:0 1 42%;min-height:150px;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+  .empty{color:#98a1ad;font-size:12.5px;text-align:center;padding:22px 8px;line-height:1.7}
+  .src{border:1px solid var(--line);border-radius:8px;padding:8px 11px;cursor:pointer;transition:background .2s}
+  .src:hover{background:var(--brand-weak)}
+  .src.dim{opacity:.45}
+  .src .row1{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+  .src .n{font-weight:800;color:var(--brand)}
+  .badge{font-size:11px;border-radius:4px;padding:1px 6px}
+  .badge.image{background:#e3f5ec;color:#0d7a52}
+  .badge.table{background:#fdf1de;color:#9a5b0c}
+  .badge.text{background:var(--brand-weak);color:#1c46b8}
+  .badge.caption{background:#f0e9fb;color:#6b3fb8}
+  .src .doc{color:#1b2330;font-size:12.5px;font-weight:600}
+  .src .meta{color:#8a93a3;font-size:11.5px;margin-left:auto;white-space:nowrap}
+  .src .snippet{color:#5a6472;font-size:12px;line-height:1.55;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .src .scores{margin-top:5px;display:flex;gap:6px;flex-wrap:wrap}
+  .score{font-size:10.5px;background:#f1f3f6;border-radius:4px;padding:1px 6px;color:#697482}
+  .src .okmark{color:var(--ok);font-weight:700;font-size:12px;margin-left:auto}
+
+  /* 检索详情表 */
+  #tab-trace{overflow:auto;padding:8px 10px}
+  table.trace{width:100%;border-collapse:collapse;font-size:12px}
+  table.trace th,table.trace td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+  table.trace th{color:#697482;font-weight:600;background:#f8fafc}
+  table.trace td.num{font-family:Consolas,monospace}
+
+  /* PDF 预览 */
+  .pdfcard{flex:1;min-height:260px;display:flex;flex-direction:column}
+  .pdfhead{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line)}
+  .pdfhead .t{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pagenav{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:12.5px;color:#5a6472}
+  .pagenav button{border:1px solid var(--line);background:#fff;border-radius:6px;width:26px;height:24px;cursor:pointer}
+  .pagewrap{flex:1;overflow:auto;background:#e9edf2;display:flex;justify-content:center;padding:14px;min-height:0}
+  .page{position:relative;width:min(560px,94%);aspect-ratio:210/297;background:#fff;box-shadow:0 2px 10px #0002;border-radius:2px}
+  .ptitle{position:absolute;top:3%;left:10%;right:10%;height:3.2%;background:#d4d9e0;border-radius:2px}
+  .bars{position:absolute;left:10%;right:10%;display:flex;flex-direction:column;gap:2.1%;overflow:hidden}
+  .bars .ln{height:2.2%;background:#e4e8ee;border-radius:2px;flex:none}
+  #barsAbove{top:8%;height:10%}
+  #barsMain{top:36%;height:56%}
+  .figwrap{position:absolute;border-radius:4px;background:#fbfcff;border:1px solid #e8ecf3;display:flex;flex-direction:column;padding:1.5%}
+  .figcanvas{flex:1;display:flex;align-items:flex-end;justify-content:space-around;gap:4%;background:linear-gradient(180deg,#f7f9ff,#eef3ff);border-radius:3px;padding:2%}
+  .fg{display:flex;align-items:flex-end;gap:14%;height:100%}
+  .bar{width:14px;border-radius:2px 2px 0 0}
+  .bar.m{background:#2456e6}.bar.h{background:#9db4e8}
+  .figcap{font-size:8.5px;color:#5a6472;text-align:center;padding-top:1.5%;font-style:italic}
+  .figcap b{color:#1b2330}
+  .tblwrap{position:absolute;background:#fff;border:1px solid #dfe4ec;border-radius:3px;overflow:hidden}
+  .tblwrap table{width:100%;height:100%;border-collapse:collapse;font-size:9px}
+  .tblwrap th{background:#eef2f8;color:#3d4553;font-weight:700}
+  .tblwrap th,.tblwrap td{border:1px solid #e6eaf0;text-align:center;padding:0 3px}
+  .hl{position:absolute;background:#ffe98a66;border:2px solid #e6a700;border-radius:4px;pointer-events:none;box-sizing:border-box}
+  .hl.pulse{animation:hlp 1.1s ease-out 2}
+  @keyframes hlp{0%{box-shadow:0 0 0 0 #e6a70088}100%{box-shadow:0 0 0 14px #e6a70000}}
+  .pgfoot{position:absolute;bottom:2.6%;left:0;right:0;text-align:center;font-size:8px;color:#a6aeb8}
+  .pdffoot{padding:7px 12px;border-top:1px solid var(--line);font-size:11.5px;color:#697482;font-family:Consolas,Menlo,monospace}
+  .pdffoot b{color:#2456e6}
+
+  footer{padding:2px 16px 10px;color:#98a1ad;font-size:11.5px;text-align:center}
+  @media (max-width:1000px){.app{grid-template-columns:1fr;height:auto}.col{min-height:520px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">🔬 DocLens<span class="beta">M4 UI 原型 · 静态模拟（无后端）</span></div>
+  <div class="spacer"></div>
+  <label>消融档位
+    <select id="profile">
+      <option>A</option><option>B</option><option>C</option><option selected>D</option><option>E</option><option>F</option>
+    </select>
+  </label>
+  <button id="btnLog">SSE 事件流</button>
+</header>
+
+<div class="app">
+  <!-- ══════ 左栏：对话 ══════ -->
+  <section class="col">
+    <div class="card stages">
+      <div class="stage" id="st-retrieve"><i>1</i>检索<em id="st-t-retrieve"></em></div><div class="arrow">→</div>
+      <div class="stage" id="st-rerank"><i>2</i>重排<em id="st-t-rerank"></em></div><div class="arrow">→</div>
+      <div class="stage" id="st-assemble"><i>3</i>组装<em id="st-t-assemble"></em></div><div class="arrow">→</div>
+      <div class="stage" id="st-generate"><i>4</i>生成<em id="st-t-generate"></em></div>
+      <div class="total" id="st-total"></div>
+    </div>
+
+    <div class="card chat" id="chat">
+      <div class="hint">这是 <b>布局与交互原型</b>：点下面任一示例问题，右侧会按真实时序模拟一次完整问答（阶段条 → 来源侧栏 → 思考面板 → 流式回答 → 点引用跳页高亮）。
+        三个示例对应 PRD 的三类典型查询。</div>
+      <div class="chips" id="samples"></div>
+      <div id="transcript"></div>
+    </div>
+
+    <div class="card askrow">
+      <input id="q" placeholder="输入问题（回车发送；演示用预置剧本回答）">
+      <button id="ask">提问</button>
+    </div>
+
+    <div class="card log" id="logCard">
+      <div class="loghead">/api/query · SSE 事件流（对应调研笔记 §1.4 契约）<button id="clearLog">清空</button></div>
+      <pre id="log"></pre>
+    </div>
+  </section>
+
+  <!-- ══════ 右栏：引用溯源 ══════ -->
+  <section class="col">
+    <div class="card tabs">
+      <button class="tab active" data-tab="cite">引用 <span id="citeCount">0</span></button>
+      <button class="tab" data-tab="trace">检索详情（FR-5.3）</button>
+    </div>
+
+    <div class="card sources" id="tab-cite">
+      <div class="empty" id="srcEmpty">提问后，来源会<b>先于回答</b>出现在这里<br>（sources 事件在"组装"完成时发出 → 流式期间即可点击跳转）</div>
+      <div id="srcList" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
+    <div class="card sources" id="tab-trace" hidden>
+      <table class="trace">
+        <thead><tr><th>块（chunk_id）</th><th>类型</th><th>dense</th><th>BM25</th><th>RRF</th><th>融合名次</th></tr></thead>
+        <tbody id="traceBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card pdfcard">
+      <div class="pdfhead">
+        <div class="t" id="pdfTitle">— 尚未打开文档 —</div>
+        <div class="pagenav">
+          <button id="pgPrev">‹</button><span id="pgLabel">第 – 页 / 9 页</span><button id="pgNext">›</button>
+        </div>
+      </div>
+      <div class="pagewrap">
+        <div class="page" id="page">
+          <div class="ptitle"></div>
+          <div class="bars" id="barsAbove"></div>
+          <div class="bars" id="barsMain"></div>
+
+          <div class="figwrap" id="figBlock" style="display:none">
+            <div class="figcanvas" id="figCanvas"></div>
+            <div class="figcap"><b>Figure 2:</b> Exam accuracy of GPT-4 vs human candidates across subjects</div>
+          </div>
+
+          <div class="tblwrap" id="tableBlock" style="display:none">
+            <table><thead><tr><th>Model</th><th>MMLU</th><th>BBH</th><th>GSM8K</th></tr></thead>
+              <tbody>
+                <tr><td>7B</td><td>61.4</td><td>54.2</td><td>58.7</td></tr>
+                <tr><td>13B</td><td>66.9</td><td>59.8</td><td>63.1</td></tr>
+                <tr><td>Human</td><td>70.2</td><td>63.5</td><td>68.9</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="hl" id="hl" style="display:none"></div>
+          <div class="pgfoot">arXiv:2411.01234v2 [cs.CL] · 第 <span id="pgNumInFoot">–</span> 页</div>
+        </div>
+      </div>
+      <div class="pdffoot" id="bboxNote">bbox = –（点击引用后显示 0–1 归一化坐标 → 百分比定位）</div>
+    </div>
+  </section>
+</div>
+
+<footer>原型仅演示布局/交互/事件时序，无真实检索与生成；真实实现 = FastAPI(sse-starlette) + React + react-pdf（调研笔记 R1/R3/R8）。</footer>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ───────── 剧本数据（模拟 §1.4 契约的载荷；bbox 抄自真实 doc.json 探针） ───────── */
+const SCENARIOS = {
+  fig: {
+    key:"fig", chip:"图表题", profile:"D",
+    q:"成绩对比图里哪个考试上超过了人类考生？",
+    doc:"Benchmarking LLMs on Standardized Exams (arXiv 2411.01234)",
+    page:3, totalPages:9, block:"fig",
+    bbox:[0.104,0.076,0.894,0.321],
+    thinking:"这是图表题——纯文本证据答不对，必须读图。\n先按“exam accuracy comparison”召回：Figure 2 的图注在文本路命中，同一张图在图像路也命中（同证据两面）。\n证据组归并后进入重排；组装时把 Figure 2 原图与图注同编号送给 VLM。\n接下来读图：逐科对比模型与人类柱高……",
+    sources:[
+      {n:1,kind:"image",doc:"Benchmarking LLMs on Std. Exams",page:3,bbox:[0.104,0.076,0.894,0.321],
+       chunk_id:"13c8e91b:0142",snippet:"Figure 2: Exam accuracy of GPT-4 vs human candidates across five subjects…",dense:"0.83",bm25:"12.4",rrf:"0.031",rank:1},
+      {n:2,kind:"text",doc:"Benchmarking LLMs on Std. Exams",page:2,bbox:[0.101,0.372,0.899,0.627],
+       chunk_id:"13c8e91b:0088",snippet:"…we compare model accuracy against the human median across five subjects; results are shown in Figure 2…",dense:"0.79",bm25:"9.8",rrf:"0.027",rank:2},
+      {n:3,kind:"table",doc:"Benchmarking LLMs on Std. Exams",page:5,bbox:[0.098,0.204,0.902,0.552],
+       chunk_id:"13c8e91b:0203",snippet:"Table 2: Accuracy by subject and model size…",dense:"0.71",bm25:"11.2",rrf:"0.024",rank:3}
+    ],
+    answer:"从 Figure 2 的成绩对比图看，模型在数学（Mathematics）考试上超过了人类考生：模型准确率约 82%，人类中位数约 74% [1]。其余四科模型仍落后 3–9 个百分点 [2]。图注与正文的交叉表述一致，该结论可靠 [1][2]。",
+    cited:[1,2], invalid:[],
+    usage:{prompt_tokens:4123, completion_tokens:186}
+  },
+  table: {
+    key:"table", chip:"表格题", profile:"D",
+    q:"Table 2 里 7B 比 13B 在 MMLU 上低多少分？",
+    doc:"Benchmarking LLMs on Standardized Exams (arXiv 2411.01234)",
+    page:5, totalPages:9, block:"table",
+    bbox:[0.098,0.204,0.902,0.552],
+    thinking:"表格题——需要读表内结构而不是正文。\n表格卡片（表注+列名+行名）在文本路强命中，Table 2 定位到第 5 页。\n数值：7B 行 MMLU=61.4，13B 行=66.9……",
+    sources:[
+      {n:1,kind:"table",doc:"Benchmarking LLMs on Std. Exams",page:5,bbox:[0.098,0.204,0.902,0.552],
+       chunk_id:"13c8e91b:0203",snippet:"Table 2: Accuracy by subject and model size【列】Model/MMLU/BBH/GSM8K【行】7B/13B/Human…",dense:"0.88",bm25:"13.1",rrf:"0.033",rank:1},
+      {n:2,kind:"text",doc:"Benchmarking LLMs on Std. Exams",page:4,bbox:[0.101,0.297,0.728,0.341],
+       chunk_id:"13c8e91b:0187",snippet:"…Table 2 summarizes per-subject accuracy for the 7B and 13B checkpoints…",dense:"0.74",bm25:"8.9",rrf:"0.022",rank:2}
+    ],
+    answer:"Table 2 中，7B 模型 MMLU 为 61.4 分，13B 为 66.9 分——7B 比 13B 低 5.5 分 [1]。该差距在 BBH 上同样存在（-5.6 分）[7][1]。",
+    cited:[1], invalid:[7],
+    usage:{prompt_tokens:3908, completion_tokens:97}
+  },
+  unans: {
+    key:"unans", chip:"不可回答题", profile:"D",
+    q:"论文里提到了作者团队的经费来源吗？",
+    doc:"Benchmarking LLMs on Standardized Exams (arXiv 2411.01234)",
+    page:1, totalPages:9, block:"none",
+    bbox:null,
+    thinking:"检索“funding / 经费来源”……\n各路命中的都是 Acknowledgments 附近碎片与正文引用，与“经费来源”语义不符；最高分 0.41，明显低于领域相关题的分布。",
+    sources:[
+      {n:1,kind:"text",doc:"Benchmarking LLMs on Std. Exams",page:1,bbox:[0.101,0.134,0.747,0.182],
+       chunk_id:"13c8e91b:0003",snippet:"…we thank the anonymous reviewers for their feedback…",dense:"0.41",bm25:"2.3",rrf:"0.009",rank:1},
+      {n:2,kind:"text",doc:"Benchmarking LLMs on Std. Exams",page:2,bbox:[0.101,0.203,0.620,0.259],
+       chunk_id:"13c8e91b:0051",snippet:"…funding for compute was provided by the university cluster…",dense:"0.39",bm25:"1.8",rrf:"0.008",rank:2}
+    ],
+    answer:"检索到的内容里没有关于作者团队经费来源的可靠依据（最高相关度仅 0.41），我无法基于本库回答这个问题。",
+    cited:[], invalid:[],
+    fallback:"FR-4.4 无依据兜底：judge 判定“依据不充分”→ 明确拒答而非编造（不可回答题拒绝率 ≥80% 的验收项）。",
+    usage:{prompt_tokens:3650, completion_tokens:52}
+  }
+};
+
+/* ───────── 基础 UI 工具 ───────── */
+function logEvent(name, data){
+  const ts = new Date().toTimeString().slice(0,8) + "." + String(Date.now()%1000).padStart(3,"0");
+  const pre = $("log");
+  pre.textContent += "[" + ts + "]  event: " + name + "\n        data: " + JSON.stringify(data) + "\n";
+  pre.scrollTop = pre.scrollHeight;
+}
+function setStage(id, status, timeText){
+  const el = $("st-"+id);
+  el.classList.remove("active","done");
+  if(status) el.classList.add(status);
+  $("st-t-"+id).textContent = timeText || "";
+}
+function resetStages(){
+  ["retrieve","rerank","assemble","generate"].forEach(s=>setStage(s,null,""));
+  $("st-total").textContent = ""; $("st-total").classList.remove("ok");
+}
+
+/* ───────── 假 PDF 页渲染 ───────── */
+function bars(host, widths){
+  host.innerHTML = "";
+  widths.forEach(w=>{
+    const d = document.createElement("div");
+    d.className = "ln"; d.style.width = w + "%";
+    host.appendChild(d);
+  });
+}
+function buildFigure(){
+  const c = $("figCanvas"); c.innerHTML = "";
+  const data = [["MMLU",76,71],["BBH",70,66],["Law",64,62],["Math",82,74],["GSM8K",79,72]];
+  data.forEach(([label,m,h])=>{
+    const g = document.createElement("div"); g.className = "fg";
+    const bm = document.createElement("div"); bm.className="bar m"; bm.style.height=(m*0.62)+"%"; bm.title="模型 "+m+"%";
+    const bh = document.createElement("div"); bh.className="bar h"; bh.style.height=(h*0.62)+"%"; bh.title="人类 "+h+"%";
+    g.appendChild(bm); g.appendChild(bh);
+    if(label==="Math"){ bm.style.outline="2px solid #0d9463"; bm.style.outlineOffset="1px"; }
+    c.appendChild(g);
+  });
+}
+function setPage(sc){
+  $("pdfTitle").textContent = sc.doc;
+  $("pgLabel").textContent = "第 " + sc.page + " 页 / " + sc.totalPages + " 页";
+  $("pgNumInFoot").textContent = sc.page;
+  const fig = sc.block==="fig", tbl = sc.block==="table";
+  $("figBlock").style.display = fig ? "flex" : "none";
+  $("tableBlock").style.display = tbl ? "block" : "none";
+  if(fig){
+    const b = sc.bbox;
+    Object.assign($("figBlock").style, {left:(b[0]*100)+"%", top:(b[1]*100)+"%", width:((b[2]-b[0])*100)+"%", height:((b[3]-b[1])*100)+"%"});
+    buildFigure();
+  }
+  if(tbl){
+    const b = sc.bbox;
+    Object.assign($("tableBlock").style, {left:(b[0]*100)+"%", top:(b[1]*100)+"%", width:((b[2]-b[0])*100)+"%", height:((b[3]-b[1])*100)+"%"});
+  }
+  $("barsAbove").style.display = (tbl || sc.block==="none") ? "flex" : "none";
+  $("barsMain").style.display  = (tbl || sc.block==="none") ? "flex" : "none";
+  $("hl").style.display = "none";
+  $("bboxNote").innerHTML = sc.bbox
+    ? "bbox = <b>[" + sc.bbox.join(", ") + "]</b>（0–1 归一化，M1 入库原值）→ left:" + (sc.bbox[0]*100).toFixed(1) + "% top:" + (sc.bbox[1]*100).toFixed(1)
+      + "% w:" + ((sc.bbox[2]-sc.bbox[0])*100).toFixed(1) + "% h:" + ((sc.bbox[3]-sc.bbox[1])*100).toFixed(1) + "%"
+    : "bbox = –（拒答场景：无证据可高亮）";
+}
+function showHighlight(bbox){
+  const hl = $("hl");
+  Object.assign(hl.style, {display:"block", left:(bbox[0]*100)+"%", top:(bbox[1]*100)+"%",
+    width:((bbox[2]-bbox[0])*100)+"%", height:((bbox[3]-bbox[1])*100)+"%"});
+  hl.classList.remove("pulse"); void hl.offsetWidth; hl.classList.add("pulse");
+}
+function gotoPage(pageNo){
+  const sc = state.current; if(!sc) return;
+  const p = Math.min(Math.max(pageNo,1), sc.totalPages);
+  state.pageOverride = p;
+  $("pgLabel").textContent = "第 " + p + " 页 / " + sc.totalPages + " 页";
+  $("pgNumInFoot").textContent = p;
+  if(p !== sc.page){ $("hl").style.display="none"; $("bboxNote").textContent = "bbox = –（第 "+p+" 页无当前引用的高亮证据）"; }
+  else { setPage(sc); }
+}
+
+/* ───────── 来源侧栏 / 检索详情 ───────── */
+const KIND_CN = {image:"图", table:"表格", text:"文本", caption:"图注"};
+function renderSources(sc){
+  $("srcEmpty").style.display = "none";
+  const host = $("srcList"); host.innerHTML = "";
+  sc.sources.forEach(s=>{
+    const d = document.createElement("div");
+    d.className = "src"; d.id = "src-"+s.n;
+    d.innerHTML =
+      '<div class="row1"><span class="n">[' + s.n + ']</span>' +
+      '<span class="badge ' + s.kind + '">' + KIND_CN[s.kind] + '</span>' +
+      '<span class="doc">' + s.doc + '</span>' +
+      '<span class="meta">第 ' + s.page + ' 页 · ' + s.chunk_id + '</span></div>' +
+      '<div class="snippet">' + s.snippet + '</div>' +
+      '<div class="scores"><span class="score">dense ' + s.dense + '</span><span class="score">BM25 ' + s.bm25 +
+      '</span><span class="score">RRF ' + s.rrf + '</span><span class="okmark" style="display:none">✓ 被引用</span></div>';
+    d.onclick = ()=>{ if(s.bbox){ setPageTo(s.page, sc); showHighlight(s.bbox); } };
+    host.appendChild(d);
+  });
+  $("citeCount").textContent = sc.sources.length;
+}
+function renderTrace(sc){
+  const tb = $("traceBody"); tb.innerHTML = "";
+  sc.sources.forEach(s=>{
+    tb.innerHTML += "<tr><td>" + s.chunk_id + "</td><td><span class='badge " + s.kind + "'>" + KIND_CN[s.kind] +
+      "</span></td><td class='num'>" + s.dense + "</td><td class='num'>" + s.bm25 + "</td><td class='num'>" + s.rrf +
+      "</td><td>#" + s.rank + "</td></tr>";
+  });
+  tb.innerHTML += "<tr style='color:#98a1ad'><td>…（未入选）</td><td>文本</td><td class='num'>0.55</td><td class='num'>4.1</td><td class='num'>–</td><td>未入 top-k</td></tr>";
+}
+
+/* ───────── 答案流式渲染（把 [n] 拆成可点击引用） ───────── */
+function parseAnswer(text, invalidSet){
+  const parts = []; const re = /\[(\d+)\]/g; let last = 0, m;
+  while((m = re.exec(text))){
+    if(m.index > last) parts.push({t:"text", s:text.slice(last, m.index)});
+    parts.push({t:"cite", n:parseInt(m[1],10)});
+    last = re.lastIndex;
+  }
+  if(last < text.length) parts.push({t:"text", s:text.slice(last)});
+  return parts;
+}
+function makeCite(n, invalidSet){
+  const sup = document.createElement("sup");
+  const bad = invalidSet.has(n);
+  sup.className = "cite" + (bad ? " invalid" : "");
+  sup.textContent = "[" + n + "]";
+  sup.title = bad ? "越界引用：候选中不存在 [7]，按契约整句降级标记（不静默删）——m3 调研 R11" : "点击跳转到来源 [" + n + "]";
+  sup.onclick = ()=>{ if(!bad) jumpTo(n); };
+  return sup;
+}
+function jumpTo(n){
+  const sc = state.current; const s = sc.sources.find(x=>x.n===n); if(!s) return;
+  document.querySelectorAll(".src").forEach(el=>el.classList.remove("dim"));
+  const card = $("src-"+n);
+  card.scrollIntoView({behavior:"smooth", block:"nearest"});
+  card.style.background = "var(--brand-weak)";
+  setTimeout(()=>card.style.background="", 900);
+  setPageTo(s.page, sc);
+  showHighlight(s.bbox);
+}
+function setPageTo(pageNo, sc){
+  state.pageOverride = (pageNo !== sc.page) ? pageNo : null;
+  setPage(sc);
+  $("pgLabel").textContent = "第 " + pageNo + " 页 / " + sc.totalPages + " 页";
+  $("pgNumInFoot").textContent = pageNo;
+}
+
+/* ───────── 主流程：按 §1.4 时序模拟一次问答 ───────── */
+const state = { running:false, current:null, pageOverride:null };
+
+async function runScenario(key){
+  if(state.running) return;
+  state.running = true; $("ask").disabled = true;
+  const sc = SCENARIOS[key]; state.current = sc; state.pageOverride = null;
+
+  // 复位
+  resetStages();
+  $("log").textContent = "";
+  $("transcript").innerHTML = "";
+  $("srcList").innerHTML = ""; $("srcEmpty").style.display = "block"; $("citeCount").textContent = "0";
+  $("traceBody").innerHTML = "";
+  $("pdfTitle").textContent = "— 尚未打开文档 —"; $("pgLabel").textContent = "第 – 页 / 9 页"; $("pgNumInFoot").textContent = "–";
+  $("bboxNote").textContent = "bbox = –（点击引用后显示 0–1 归一化坐标 → 百分比定位）";
+
+  const t0 = performance.now();
+  const qEl = document.createElement("div"); qEl.className = "bubble-q"; qEl.textContent = sc.q + "　（档位 " + ($("profile").value) + "）";
+  $("transcript").appendChild(qEl);
+  const aEl = document.createElement("div"); aEl.className = "bubble-a";
+  const think = document.createElement("div"); think.className = "think";
+  think.innerHTML = '<div class="thead" onclick="this.parentNode.classList.toggle(\'collapsed\')">🤔 <span id="thinkLabel">思考中…</span><span class="arrow">▾</span></div><div class="tbody" id="thinkBody"></div>';
+  const atext = document.createElement("div"); atext.className = "atext";
+  aEl.appendChild(think); aEl.appendChild(atext);
+  $("transcript").appendChild(aEl);
+
+  // ① 检索
+  logEvent("stage",{stage:"retrieve"}); setStage("retrieve","active");
+  await sleep(900); setStage("retrieve","done","0.9s");
+
+  // ② 重排
+  logEvent("stage",{stage:"rerank"}); setStage("rerank","active");
+  await sleep(2100); setStage("rerank","done","2.1s");
+
+  // ③ 组装 + sources（先于首 token！）
+  logEvent("stage",{stage:"assemble"}); setStage("assemble","active");
+  await sleep(300); setStage("assemble","done","0.3s");
+  renderSources(sc); renderTrace(sc);
+  logEvent("sources",{profile:$("profile").value, sources:sc.sources.map(s=>({n:s.n,doc_id:"13c8e91b",page:s.page,bbox:s.bbox,kind:s.kind,chunk_id:s.chunk_id}))});
+
+  // ④ 生成：思考 → 正文
+  logEvent("stage",{stage:"generate"}); setStage("generate","active");
+  logEvent("thinking",{status:"started"});
+  const thinkBody = $("thinkBody"), thinkLabel = $("thinkLabel");
+  for(const seg of sc.thinking.split("\n")){
+    for(const ch of seg){ thinkBody.textContent += ch; await sleep(9); }
+    thinkBody.textContent += "\n"; await sleep(120);
+  }
+  const thinkMs = Math.round(performance.now()-t0);
+  thinkLabel.textContent = "已思考 " + (thinkMs/1000).toFixed(1) + "s（reasoning_content 已折叠，不入正文）";
+  think.classList.add("collapsed");
+  logEvent("thinking",{status:"done", elapsed_ms:thinkMs});
+
+  // token 流
+  const invalidSet = new Set(sc.invalid || []);
+  for(const p of parseAnswer(sc.answer, invalidSet)){
+    if(p.t === "text"){
+      for(const ch of p.s){ atext.appendChild(document.createTextNode(ch)); await sleep(14); }
+    }else{
+      atext.appendChild(makeCite(p.n, invalidSet)); await sleep(90);
+    }
+    $("chat").scrollTop = $("chat").scrollHeight;
+  }
+
+  // citations + done
+  logEvent("citations",{cited:sc.cited, invalid:sc.invalid || []});
+  $("citeCount").textContent = sc.cited.length;
+  document.querySelectorAll(".src").forEach(el=>el.classList.add("dim"));
+  sc.cited.forEach(n=>{ const c=$("src-"+n); if(c){ c.classList.remove("dim"); c.querySelector(".okmark").style.display="inline"; } });
+  const badge = document.createElement("div"); badge.className = "citebadge";
+  badge.innerHTML = "引用解析：<b>" + (sc.cited.length ? "cited [" + sc.cited.join(", ") + "]" : "cited ∅（拒答）") + "</b>" +
+    ((sc.invalid||[]).length ? " · <b class='bad'>invalid [" + sc.invalid.join(",") + "] → 降级标记</b>" : "") + "（citations 事件，finish 后一次性解析）";
+  aEl.appendChild(badge);
+  if(sc.fallback){
+    const fb = document.createElement("div"); fb.className = "fallback"; fb.textContent = sc.fallback;
+    aEl.appendChild(fb);
+  }
+  const totalS = ((performance.now()-t0)/1000);
+  logEvent("done",{finish_reason:"stop", usage:sc.usage, timing:{total_ms:Math.round(totalS*1000)}, trace_id:"tr_"+Math.random().toString(36).slice(2,8)});
+  setStage("generate","done",(totalS).toFixed(1)+"s");
+  const tt = $("st-total"); tt.textContent = "全程 " + totalS.toFixed(1) + "s ≤20s ✓（R6 口径：trace 时间戳）"; tt.classList.add("ok");
+
+  // 自动跳到第一个被引来源
+  if(sc.cited.length){ jumpTo(sc.cited[0]); }
+  else { setPageTo(sc.page, sc); }
+  $("chat").scrollTop = $("chat").scrollHeight;
+  state.running = false; $("ask").disabled = false;
+}
+
+/* ───────── 事件绑定 ───────── */
+Object.entries(SCENARIOS).forEach(([key,sc])=>{
+  const b = document.createElement("button");
+  b.className = "chip";
+  b.innerHTML = sc.chip + "<small>" + sc.q.slice(0,14) + "…</small>";
+  b.onclick = ()=>{ $("q").value = sc.q; runScenario(key); };
+  $("samples").appendChild(b);
+});
+$("ask").onclick = ()=>{
+  const txt = $("q").value.trim(); if(!txt) return;
+  // 演示模式：非预置问题也走“图表题”剧本，仅替换问题文本
+  SCENARIOS.fig.q = txt;
+  runScenario("fig");
+};
+$("q").addEventListener("keydown", e=>{ if(e.key==="Enter") $("ask").click(); });
+$("btnLog").onclick = ()=>{ $("logCard").hidden = !$("logCard").hidden; };
+$("clearLog").onclick = ()=>{ $("log").textContent = ""; };
+document.querySelectorAll(".tab").forEach(t=>{
+  t.onclick = ()=>{
+    document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));
+    t.classList.add("active");
+    $("tab-cite").hidden = t.dataset.tab !== "cite";
+    $("tab-trace").hidden = t.dataset.tab !== "trace";
+  };
+});
+$("pgPrev").onclick = ()=>gotoPage((state.pageOverride || (state.current?state.current.page:1)) - 1);
+$("pgNext").onclick = ()=>gotoPage((state.pageOverride || (state.current?state.current.page:1)) + 1);
+
+// 初始化假页面文本条
+bars($("barsAbove"), [95,88]);
+bars($("barsMain"),  [92,97,85,90,78,94,88,96,82,74,89]);
+</script>
+</body>
+</html>
