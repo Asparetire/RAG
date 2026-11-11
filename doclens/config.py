@@ -59,8 +59,8 @@ class Profile:
 
 
 PROFILES: dict[str, Profile] = {
-    "A": Profile("A", ABLATION_TIERS["A"], text_kinds=("text",)),
-    "B": Profile("B", ABLATION_TIERS["B"]),
+    "A": Profile("A", ABLATION_TIERS["A"], text_kinds=("text",), use_image_route=False),
+    "B": Profile("B", ABLATION_TIERS["B"], use_image_route=False),
     "C": Profile("C", ABLATION_TIERS["C"]),
     "D": Profile("D", ABLATION_TIERS["D"], rerank="flash"),
     "E": Profile("E", ABLATION_TIERS["E"], rerank="flash", use_ctx_prefix=True),
