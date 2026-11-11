@@ -78,4 +78,12 @@
 - **过程记录**：① 沙箱曾拦 `.git` 写入（ACL 检查正常，属沙箱策略；放行后正常）；② 容器 git pull 曾被 scp 遗留的本地改动挡住（checkout 后恢复，教训：容器侧文件只走 git，不再 scp 同步已入库文件）；③ PS 5.1 引号传递多次坑 ssh 远程命令（改为无嵌套引号或脚本文件方案）。
 - 新增待办：无。下一站 M2 索引（embeddings/qdrant/bm25/contextual + ingest.py）。
 
+## 2026-11-11｜docs：M2 runbook 终稿定稿（评审修订+同类调研）并获 G1 批准开工
+
+- M2 runbook 评审修订并入：新增 §3.1 实施细则（幂等写入=doc 级跳过 + uuid5 点 ID + 先删后插；t_chunk 单一事实源回表，补 FR-2.4 坐标与正文取回；表格卡片；K1 References/碎片过滤；PyMySQL 异步注意），§4 步骤编号错位修正，BM25 改重建式增量，风险表 +3。
+- 表格 v2 升级为**结构理解管线·规则版**（用户选档）：网格化（rowspan/colspan 复制补全）→ 无效区域规则标记 → 清洗后网格判列名/行名（先扫地再认门牌）→ manifest 随 doc.json 落盘；125 表全量人工审计；LLM/VLM 仲裁留财报泛化包。
+- 同类项目调研完成 `specs/research/m2-indexing-survey.md`（分块/表格/多模态三线、32 条编号来源）：K1/K2/K4/K5 主线获 RAGFlow/Docling/LlamaIndex/Qdrant 官方先例印证；R1–R6 小修订已并入 runbook（页眉页脚跨页重复判定 / overlap 消融位 / 前缀预算理由 / 图像探针降采样对照 / 无图注图策略 / manifest 卖点）。
+- **G1 批准**：2026-11-11 14:54，指令「开始M2的发开工作 保证工作质量」→ 普通实现（S2'），收官走 S3 代码审查 + S4 安全复查 + tag m2。
+- 环境侦察：解析原料在容器 `/home/doclens/RAG/data/parsed/`（11 篇，doc.json + structured_content.json + middle_json.json + images/ 齐备）；Windows 经 SSH 免密直连容器执行；调研残留临时目录 `_tmp_research` 已清理。
+
 
