@@ -66,20 +66,21 @@ def _chunk_rows(doc: DoclensDoc, chunks: list) -> list[tuple]:
 
 
 def _write_chunks(conn, doc: DoclensDoc, rows: list[tuple], doc_hash: str) -> None:
+    """t_doc 先 upsert（外键父表），t_chunk 先删后插。"""
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM t_chunk WHERE doc_id=%s", (doc.doc_id,))
-        cur.executemany(
-            "INSERT INTO t_chunk (chunk_id, doc_id, kind, content, page, bbox, "
-            "heading_path, image_path, caption, content_hash) "
-            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-            rows,
-        )
         cur.execute(
             "INSERT INTO t_doc (doc_id, title, doi, sha256, doc_hash, n_chunks) "
             "VALUES (%s,%s,%s,%s,%s,%s) "
             "ON DUPLICATE KEY UPDATE title=VALUES(title), doi=VALUES(doi), "
             "sha256=VALUES(sha256), doc_hash=VALUES(doc_hash), n_chunks=VALUES(n_chunks)",
             (doc.doc_id, doc.title, doc.doi, doc.sha256, doc_hash, len(rows)),
+        )
+        cur.execute("DELETE FROM t_chunk WHERE doc_id=%s", (doc.doc_id,))
+        cur.executemany(
+            "INSERT INTO t_chunk (chunk_id, doc_id, kind, content, page, bbox, "
+            "heading_path, image_path, caption, content_hash) "
+            "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            rows,
         )
     conn.commit()
 

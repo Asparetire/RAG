@@ -26,9 +26,10 @@ from doclens.config import (
 )
 from doclens.index.db import connect
 
-CONCURRENCY = 4
-RETRIES = 3
-BACKOFF_BASE = 2.0   # 指数退避：2s / 4s / 8s
+CONCURRENCY = 2        # 实测并发 4 触发账号级 429（AccountRateLimitExceeded），降 2（runbook 风险表第 1 条）
+RETRIES = 6            # 批量场景 429 退避要更深：6 次指数退避（2/4/8/16/32/64s 上限受下面抖动封顶）
+BACKOFF_BASE = 2.0     # 指数退避基数
+BACKOFF_MAX = 60.0     # 单次退避上限
 TIMEOUT = 60.0
 
 
@@ -111,11 +112,19 @@ class EmbeddingClient:
     """异步嵌入客户端：embed_texts / embed_image_files（缓存先行，未命中才调 API）。"""
 
     def __init__(self, *, concurrency: int = CONCURRENCY) -> None:
-        self._sem = asyncio.Semaphore(concurrency)
+        self._concurrency = concurrency
+        self._sem: asyncio.Semaphore | None = None  # 懒创建：绑定首次使用时的事件循环
         base = (settings.ark_embed_base_url or settings.ark_base_url).rstrip("/")
         self._url = f"{base}/embeddings/multimodal"
         self._headers = {"Authorization": f"Bearer {settings.ark_api_key}"}
         self.stats = {"api_calls": 0, "cache_hits": 0}  # 2.8 幂等验收证据（收尾汇总输出）
+
+    def _semaphore(self) -> asyncio.Semaphore:
+        """每事件循环一个信号量（跨 asyncio.run 复用客户端时不串循环）。"""
+        loop = asyncio.get_running_loop()
+        if self._sem is None or getattr(self._sem, "_loop", loop) is not loop:
+            self._sem = asyncio.Semaphore(self._concurrency)
+        return self._sem
 
     async def _post_one(self, client: httpx.AsyncClient, item: dict) -> list[float]:
         """单条请求（信号量限并发）+ 指数退避重试。
@@ -126,7 +135,7 @@ class EmbeddingClient:
         last: Exception | None = None
         for attempt in range(1, RETRIES + 1):
             try:
-                async with self._sem:
+                async with self._semaphore():
                     resp = await client.post(
                         self._url,
                         headers=self._headers,
@@ -142,7 +151,8 @@ class EmbeddingClient:
             except httpx.HTTPError as exc:  # 网络错误：可重试
                 last = exc
             if attempt < RETRIES:
-                await asyncio.sleep(BACKOFF_BASE ** attempt)
+                delay = min(BACKOFF_MAX, BACKOFF_BASE ** attempt)
+                await asyncio.sleep(delay)  # 429/网络错误的指数退避（2→4→…→60s 封顶）
         raise EmbedError(f"重试 {RETRIES} 次后仍失败：{last}") from last
 
     async def _embed_batch(self, jobs: list[dict]) -> list[list[float]]:
