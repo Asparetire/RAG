@@ -1,16 +1,17 @@
-"""建 MySQL 五张表（m2-runbook 2.2；幂等 IF NOT EXISTS，可重复执行）。
+"""建 MySQL 六张表（m2-runbook 2.2 + m3-runbook K2；幂等 IF NOT EXISTS，可重复执行）。
 
 表设计（§4 变更清单）：
-- t_doc         文档元数据 + doc_hash（doc.json 全文 sha256——增量跳过依据，§3.1 增量语义）
-- t_chunk       块清单单一事实源（content/bbox/kind/page/heading_path/content_hash/image_path
-                ——检索回表取正文与坐标，M3 生成、M4 高亮共用）
-- t_embed_cache 嵌入缓存（键 = sha256(model+instruction+dim+content)，严格优于 LangChain 默认键）
-- t_ctx_prefix  E 档块前缀缓存（FR-2.6，每 chunk 一条）
-- t_eval_result M5 评测结果（先建结构，run_id+profile 检索）
+- t_doc          文档元数据 + doc_hash（doc.json 全文 sha256——增量跳过依据，§3.1 增量语义）
+- t_chunk        块清单单一事实源（content/bbox/kind/page/heading_path/content_hash/image_path
+                 ——检索回表取正文与坐标，M3 生成、M4 高亮共用）
+- t_embed_cache  嵌入缓存（键 = sha256(model+instruction+dim+content)，严格优于 LangChain 默认键）
+- t_ctx_prefix   E 档块前缀缓存（FR-2.6，每 chunk 一条）
+- t_eval_result  M5 评测结果（先建结构，run_id+profile 检索）
+- t_rerank_cache M3 重排结果缓存（K2/R10，M5 消融复跑不重复计费）
 
 用法（容器内 doclens 环境）：
     python scripts/init_db.py
-验收：SHOW TABLES 5 张齐（t_doc/t_chunk/t_embed_cache/t_ctx_prefix/t_eval_result）。
+验收：SHOW TABLES 6 张齐（t_doc/t_chunk/t_embed_cache/t_ctx_prefix/t_eval_result/t_rerank_cache）。
 """
 from __future__ import annotations
 
@@ -88,11 +89,23 @@ DDL = [
         KEY idx_eval_run (run_id, profile)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评测与消融结果（M5 用，先建结构）'
     """,
+    # M3 重排结果缓存（m3-runbook K2，调研 R10）：键 = sha256(model+params+候选指纹+query)，
+    # ranking = 重排后 chunk_id 有序列表 JSON——M5 消融跨配置重跑省钱+可复现（temp=0 非确定性兜底）
+    """
+    CREATE TABLE IF NOT EXISTS t_rerank_cache (
+        cache_key   CHAR(64)      NOT NULL PRIMARY KEY COMMENT 'sha256(model+params+候选指纹+query)',
+        model       VARCHAR(128)  NOT NULL,
+        n_candidates INT          NOT NULL,
+        ranking     JSON          NOT NULL COMMENT '重排后 chunk_id 有序列表',
+        degraded    TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '1=降级（回 RRF 序/解析失败）',
+        created_at  DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='LLM 重排结果缓存（K2/R10，M5 复跑不重复计费）'
+    """,
 ]
 
 
 def main() -> int:
-    expected = {"t_doc", "t_chunk", "t_embed_cache", "t_ctx_prefix", "t_eval_result"}
+    expected = {"t_doc", "t_chunk", "t_embed_cache", "t_ctx_prefix", "t_eval_result", "t_rerank_cache"}
     conn = connect()
     try:
         with conn.cursor() as cur:
@@ -104,7 +117,7 @@ def main() -> int:
         if missing:
             print(f"[失败] 缺表: {sorted(missing)}")
             return 1
-        print(f"[完成] 5/5 张表就绪: {sorted(expected)}")
+        print(f"[完成] {len(expected)}/{len(expected)} 张表就绪: {sorted(expected)}")
         return 0
     finally:
         conn.close()

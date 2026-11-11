@@ -8,6 +8,7 @@
 - data/ 路径常量（代码跨平台：pathlib，不写死系统路径）。
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,6 +29,43 @@ ABLATION_TIERS: dict[str, str] = {
     "D": "C + 重排——精排贡献（flash/pro 重排器对比位）",
     "E": "D + 块级上下文增强索引——索引侧增强增益",
     "F": "E + 多模态重排——跨模态精排增益",
+}
+
+
+# ---------- 消融档位注册表（m3-runbook K8，调研 R19：一条命令一个完整配置） ----------
+@dataclass(frozen=True)
+class Profile:
+    """一个消融档位 = 一次问答的完整配置（六档共享字段 + 档位覆写）。
+
+    字段即"召回方案旋钮"（调研 §1.1c）：路线开关用 kind 集合表达（None=该路关闭），
+    融合器/权重/top-k 可切换，M5 加消融档零改动。
+    """
+
+    name: str
+    desc: str
+    text_kinds: list[str] | None = ("text", "table", "caption")  # 文本集合 kind 过滤；None=关文本路
+    use_image_route: bool = True                                  # C 档起开图像向量路
+    use_bm25: bool = True                                         # A..F 全开（zh 查询由 router 旁路）
+    rerank: str | None = None                                     # None / "flash" / "pro"（D 档起）
+    use_ctx_prefix: bool = False                                  # E 档起拼 t_ctx_prefix 前缀
+    multimodal_rerank: bool = False                               # F 档视觉逐图打分（P1）
+    per_route_top: int = 30          # 每路召回量（R1 调参位 20–50）
+    fused_pool: int = 50             # RRF 融合池（D6 骨架 top-50）
+    rerank_input: int = 30           # 重排输入截断（R8）
+    final_top: int = 20              # 重排输出/组装上限（D12）
+    max_images: int = 5              # FR-4.1 图片 ≤5
+    fusion: str = "rrf"              # 融合器：rrf / weighted_rrf / dbsf（K1 可插拔）
+    rrf_k: int = 2                   # RRF k（已定约束=Qdrant 服务端默认；k=60 留 M5 对照）
+
+
+PROFILES: dict[str, Profile] = {
+    "A": Profile("A", ABLATION_TIERS["A"], text_kinds=("text",)),
+    "B": Profile("B", ABLATION_TIERS["B"]),
+    "C": Profile("C", ABLATION_TIERS["C"]),
+    "D": Profile("D", ABLATION_TIERS["D"], rerank="flash"),
+    "E": Profile("E", ABLATION_TIERS["E"], rerank="flash", use_ctx_prefix=True),
+    "F": Profile("F", ABLATION_TIERS["F"], rerank="flash", use_ctx_prefix=True,
+                 multimodal_rerank=True),
 }
 
 
