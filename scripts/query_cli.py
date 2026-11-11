@@ -118,6 +118,13 @@ async def answer_question(question: str, profile_name: str, *, rerank_pro: bool 
             else list(cand_map.values())[:profile.rerank_input]
         rerank_out = await rerank_candidates(question, inp, model_tier=tier)
         final_ranking = rerank_out.ranking
+        # R2 证据组语义：degraded（LLM 失败回 RRF 序）或最终序丢组代表时，
+        # 把 rerank 输入序（=去重后融合序）中 ranking 未覆盖的块补到尾部——
+        # 防止去重后代表未进 top-20 而组员反而进了的"证据被拆散"退化
+        covered = set(final_ranking)
+        for h in rr.pool[:profile.final_top]:
+            if h.chunk_id not in covered:
+                final_ranking = final_ranking + [h.chunk_id]
         timings["rerank_ms"] = round((time.perf_counter() - t) * 1000, 1)
 
     # 4. 上下文组装（K4）——members 全字段回表（E 档前缀 t_ctx_prefix）
@@ -134,7 +141,7 @@ async def answer_question(question: str, profile_name: str, *, rerank_pro: bool 
                 ctx_prefixes = {r[0]: r[1] for r in cur.fetchall()}
         finally:
             conn.close()
-    ctx = assemble(question, final_ranking, meta, final_top=profile.final_top,
+    ctx = assemble(question, final_ranking[:profile.final_top], meta, final_top=profile.final_top,
                    max_images=profile.max_images, use_ctx_prefix=profile.use_ctx_prefix,
                    ctx_prefixes=ctx_prefixes)
 
