@@ -80,7 +80,11 @@ def save_index(idx: Bm25Index, meta_rows: list[dict] | None = None) -> None:
 
 
 def load_index(rebuild: bool = False) -> Bm25Index:
-    """加载落盘索引；rebuild=True 或文件缺失 → 空索引（调用方重建）。"""
+    """加载落盘索引；rebuild=True 或文件缺失 → 空索引（调用方重建）。
+
+    pickle 信任边界（S4-04 纪律）：corpus.pkl 仅由本脚本 save_index 产出、随 data/ 不入库、
+    不接受外部文件——若将来需要外部交换语料，改用 JSON 明文格式。
+    """
     if rebuild or not CORPUS_PICKLE.exists():
         return Bm25Index(chunk_ids=[], corpus=[])
     data = pickle.loads(CORPUS_PICKLE.read_bytes())

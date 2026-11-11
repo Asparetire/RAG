@@ -24,11 +24,15 @@ class DBConfigError(ValueError):
 
 
 def parse_mysql_url(url: str | None = None) -> dict:
-    """解析 MYSQL_URL → pymysql.connect 参数 dict；密码 URL 解码（含特殊字符时 .env 里可 %-encode）。"""
-    raw = url if url is not None else settings.mysql_url
-    m = _URL_RE.match(raw.strip())
+    """解析 MYSQL_URL → pymysql.connect 参数 dict；密码 URL 解码（含特殊字符时 .env 里可 %-encode）。
+
+    安全约定（S4-01）：解析失败的异常消息**必须脱敏**——密码不入错误信息/日志（m2-runbook §8）。
+    """
+    raw = (url if url is not None else settings.mysql_url).strip()
+    m = _URL_RE.match(raw)
     if not m:
-        raise DBConfigError(f"MYSQL_URL 无法解析: {raw!r}（期望 mysql+pymysql://user:pwd@host:port/db）")
+        safe = re.sub(r"(://[^:@/]+:)[^@]*@", r"\1***@", raw)
+        raise DBConfigError(f"MYSQL_URL 无法解析: {safe!r}（期望 mysql+pymysql://user:pwd@host:port/db）")
     return {
         "host": m.group("host"),
         "port": int(m.group("port")),

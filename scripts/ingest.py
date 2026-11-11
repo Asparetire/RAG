@@ -39,6 +39,14 @@ def _file_hash(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
+def _image_file(doc_dir: Path, image_path: str) -> Path:
+    """image_path → 文件路径（防越界：S4-03，将来接外部解析产物时防任意文件读）。"""
+    p = (doc_dir / image_path).resolve()
+    if not p.is_relative_to(doc_dir.resolve()):
+        raise ValueError(f"image_path 越界: {image_path!r}")
+    return p
+
+
 def _downsample_bytes(path: Path) -> bytes | None:
     """长边 > IMAGE_LONG_EDGE 时降采样为 JPEG bytes；否则 None（原样读）。"""
     from PIL import Image
@@ -99,7 +107,20 @@ def process_doc(client: EmbeddingClient, qclient, conn, doc_dir: Path, force: bo
 
     chunks = chunk_doc(doc)
     text_units = [c for c in chunks if c.kind in ("text", "table", "caption")]
-    img_units = [c for c in chunks if c.kind == "image"]
+    # 图像单元：路径越界/文件缺失的直接跳过并记日志（S4-03 防越界；保持嵌入批对齐）
+    img_pairs: list[tuple] = []
+    for c in chunks:
+        if c.kind != "image":
+            continue
+        try:
+            p = _image_file(doc_dir, c.image_path) if c.image_path else None
+        except ValueError as e:
+            print(f"  [警告] {doc.doc_id} {e}——跳过该图像单元")
+            continue
+        if p is not None and p.exists():
+            img_pairs.append((c, p))
+        else:
+            print(f"  [警告] {doc.doc_id} 图像文件缺失: {c.image_path!r}——跳过该图像单元")
 
     # Qdrant 先删后插（变更文档）
     qs.delete_doc_points(qclient, doc.doc_id)
@@ -107,21 +128,20 @@ def process_doc(client: EmbeddingClient, qclient, conn, doc_dir: Path, force: bo
     async def embed_all() -> tuple[list, list]:
         vecs_t = await client.embed_texts([c.content for c in text_units])
         blobs, reused = [], []
-        for c in img_units:
-            p = doc_dir / c.image_path
+        for _c, p in img_pairs:
             small = await asyncio.to_thread(_downsample_bytes, p)
             blobs.append(small if small is not None else p.read_bytes())
             reused.append(small is not None)
         vecs_i = await client.embed_image_blobs(blobs)
-        return vecs_t, (vecs_i, reused)
+        return vecs_t, vecs_i
 
-    vecs_t, (vecs_i, reused_flags) = asyncio.run(embed_all())
+    vecs_t, vecs_i = asyncio.run(embed_all())
 
     units = []
     for c, v in zip(text_units, vecs_t):
         units.append({"chunk_id": c.chunk_id, "kind": c.kind, "vec": v, "doc_id": doc.doc_id,
                       "page": c.page, "heading_path": c.heading_path})
-    for c, v, ds in zip(img_units, vecs_i, reused_flags):
+    for (c, _p), v, ds in zip(img_pairs, vecs_i, reused):
         units.append({"chunk_id": c.chunk_id, "kind": "image", "vec": v, "doc_id": doc.doc_id,
                       "page": c.page, "heading_path": c.heading_path,
                       "image_path": c.image_path, "caption": c.caption, "downsampled": ds})
@@ -129,8 +149,8 @@ def process_doc(client: EmbeddingClient, qclient, conn, doc_dir: Path, force: bo
 
     _write_chunks(conn, doc, _chunk_rows(doc, chunks), dh)
     return {
-        "doc_id": doc.doc_id, "skipped": False, "n_text": len(text_units), "n_img": len(img_units),
-        "downsampled": sum(1 for f in reused_flags if f), "written": written,
+        "doc_id": doc.doc_id, "skipped": False, "n_text": len(text_units), "n_img": len(img_pairs),
+        "downsampled": sum(1 for f in reused if f), "written": written,
     }
 
 
