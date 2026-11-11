@@ -1,6 +1,6 @@
 {
   "version": "m3-smoke-v1",
-  "note": "M3 冒烟 20 题（m3-runbook K8/0.2）：可回答 16（纯文本 6 / 图表 5 / 表格 5，含中英对照 3 对）+ 不可回答 4。gold_hint 供验收人定位证据与判定通过/失败；不参与检索（避免给检索层作弊提示）。中英对照对 = 同一事实用 zh/en 各问一次（q_id 后缀 _zh/_en）。语料=11 篇（M2 全量）。",
+  "note": "M3 冒烟 20 题（m3-runbook K8/0.2）：可回答 16（纯文本 6 / 图表 5 / 表格 5，含中英对照 3 对：s03↔s04、s07↔s08、s12↔s13）+ 不可回答 4。gold_hint 供验收人定位证据与判定通过/失败；不参与检索（避免给检索层作弊提示）。中英对照对 = 同一事实用 zh/en 各问一次。语料=11 篇（M2 全量）。",
   "queries": [
     {
       "q_id": "s01_text_zh",
@@ -50,8 +50,9 @@
       "q_id": "s07_fig_zh",
       "type": "figure",
       "lang": "zh",
-      "question": "鲸鱼优化算法（WOA）的伪代码流程包含哪些主要阶段？",
-      "gold_hint": "f9807c0c485e Algorithm 1 Pseudo-code of WOA（算法块）+ Preliminaries/Whale optimization algorithm 节"
+      "question": "哈里斯鹰优化算法（HHO）的各个阶段是什么样的？",
+      "gold_hint": "5bec341c3134 Fig. 2 The various stages of HHO（图）+ §2.2 Harris hawks optimization",
+      "pair_of": "s08_fig_en"
     },
     {
       "q_id": "s08_fig_en",
@@ -85,8 +86,9 @@
       "q_id": "s12_table_zh",
       "type": "table",
       "lang": "zh",
-      "question": "压力容器设计问题的实验结果中，哪个算法得到的最优成本最低？",
-      "gold_hint": "3627b932f186 §4.4 Pressure-vessel design problem 结果表（WDE 对比实验表格）"
+      "question": "在预选择策略的对比研究中，哪种预选择策略表现最好？",
+      "gold_hint": "4f23718fa52e III. COMPARISON STUDY OF PRESELECTION STRATEGIES 结果表（RCPS 相关表格）",
+      "pair_of": "s13_table_en"
     },
     {
       "q_id": "s13_table_en",
