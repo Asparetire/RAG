@@ -1,13 +1,19 @@
-# 运行时依赖（M0 §0.1 初稿；安装后 pip freeze 锁版本回填，FR-7.2）
-openai                 # 火山 OpenAI 兼容 chat/VLM 流式
-httpx                  # /embeddings/multimodal 直调
-pydantic-settings      # config.py 读 .env
-PyMySQL[cryptography]  # MySQL 8 caching_sha2_password 需要 cryptography
-qdrant-client          # url 模式
-rank-bm25              # BM25 关键词索引
-jieba                  # 中文分词
-numpy
-pillow                 # 图像处理
-fastapi                # M4 服务用，M0 一并锁版
-uvicorn[standard]
-sse-starlette          # SSE 流式
+# 运行时依赖（FR-7.2 版本锁定，2026-11-11 以容器 doclens 环境实测为准）
+# 说明：
+# - qdrant-client 钉 1.15.1 与服务器 Qdrant 1.15.4 同 minor 对齐（runbook K9，体检发现②）；
+#   1.15.2–1.15.4 要求 Python<3.12 不可用，1.15.1 为 3.12 下最高 1.15.x。
+# - PyMySQL[cryptography]：MySQL 8 caching_sha2_password 认证兜底（现环境未装 cryptography 亦通，
+#   新机器安装时自动带上，防 FR-7.1 克隆跑通卡认证）。
+# - 完整传递依赖锁定见 requirements-lock.txt（容器 pip freeze 原样）。
+openai==3.48.0              # 火山 OpenAI 兼容 chat/VLM 流式（D6 重排/D7 生成）
+httpx==0.28.1               # /embeddings/multimodal 直调（D3 嵌入）
+pydantic-settings==2.16.2   # config.py 读 .env（D10）
+PyMySQL[cryptography]==1.2.4
+qdrant-client==1.15.1       # url 模式（D4）；版本对齐见上
+rank-bm25==0.2.2            # BM25 关键词索引（D5）
+jieba==0.42.1               # 中英混合分词
+numpy==2.5.4
+pillow==13.0.0              # 图像降采样/探针
+fastapi==0.162.2            # M4 服务用（D9），M0 一并锁版
+uvicorn[standard]==0.54.0
+sse-starlette==3.7.0        # SSE 流式

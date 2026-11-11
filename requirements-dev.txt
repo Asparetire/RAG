@@ -1,4 +1,4 @@
-# 开发与测试依赖（M0 §0.1）
-pytest
-pytest-cov
-pip-audit
+# 开发与测试依赖（M0 §0.1；FR-7.2 锁定，2026-11-11）
+pytest==9.2.0
+pytest-cov==7.1.0
+pip-audit==2.10.1
