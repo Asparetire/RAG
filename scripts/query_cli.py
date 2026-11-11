@@ -154,6 +154,7 @@ async def answer_question(question: str, profile_name: str, *, rerank_pro: bool 
             if b is not None:
                 blobs[img.image_path] = b
         gen = await generate_answer(question, ctx, image_blobs=blobs or None, stream=False)
+        answer = gen.answer
         timings["generate_ms"] = round((time.perf_counter() - t) * 1000, 1)
 
     # 7. 引用解析与映射（K6）
