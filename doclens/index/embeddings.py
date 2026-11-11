@@ -21,6 +21,7 @@ import httpx
 from doclens.config import (
     CORPUS_IMAGE_INSTRUCTION,
     CORPUS_TEXT_INSTRUCTION,
+    QUERY_INSTRUCTION,
     settings,
 )
 from doclens.index.db import connect
@@ -114,6 +115,7 @@ class EmbeddingClient:
         base = (settings.ark_embed_base_url or settings.ark_base_url).rstrip("/")
         self._url = f"{base}/embeddings/multimodal"
         self._headers = {"Authorization": f"Bearer {settings.ark_api_key}"}
+        self.stats = {"api_calls": 0, "cache_hits": 0}  # 2.8 幂等验收证据（收尾汇总输出）
 
     async def _post_one(self, client: httpx.AsyncClient, item: dict) -> list[float]:
         """单条请求（信号量限并发）+ 指数退避重试。
@@ -147,8 +149,11 @@ class EmbeddingClient:
         """jobs: [{cache_key, item}] → 按序返回向量（缓存命中优先）。"""
         keys = [j["cache_key"] for j in jobs]
         cached = await asyncio.to_thread(_cache_get_many, keys)
+        self.stats["cache_hits"] += len(cached)
         missing = [j for j, k in zip(jobs, keys) if k not in cached]
         fetched: dict[str, list[float]] = {}
+        if missing:
+            self.stats["api_calls"] += len(missing)
         if missing:
             async with httpx.AsyncClient() as client:
                 results = await asyncio.gather(
@@ -178,10 +183,16 @@ class EmbeddingClient:
 
     async def embed_image_files(self, paths: list[Path]) -> list[list[float]]:
         """批量图像嵌入（单图单请求 base64 data URL，D3 既定）。"""
+        blobs = await asyncio.gather(*(
+            asyncio.to_thread(lambda fp: Path(fp).read_bytes(), p) for p in paths
+        ))
+        return await self.embed_image_blobs(blobs)
+
+    async def embed_image_blobs(self, blobs: list[bytes]) -> list[list[float]]:
+        """图像 bytes 嵌入（调用方已完成降采样判定——R4：仅长边>1024px 的图缩放）。"""
         jobs = []
-        for p in paths:
-            b64 = await asyncio.to_thread(lambda fp: base64.b64encode(Path(fp).read_bytes()).decode(), p)
-            data_url = f"data:image/{p.suffix.lstrip('.').lower()};base64,{b64}"
+        for b in blobs:
+            data_url = f"data:image/jpeg;base64,{base64.b64encode(b).decode()}"
             jobs.append({
                 "cache_key": cache_key(settings.embed_model, CORPUS_IMAGE_INSTRUCTION,
                                        settings.embed_dimensions, data_url),
@@ -189,3 +200,13 @@ class EmbeddingClient:
                 "item": {"type": "image_url", "image_url": {"url": data_url}},
             })
         return await self._embed_batch(jobs)
+
+    async def embed_query(self, text: str) -> list[float]:
+        """查询侧嵌入（QUERY_INSTRUCTION 与语料侧分侧，D3 既定）。"""
+        jobs = [{
+            "cache_key": cache_key(settings.embed_model, QUERY_INSTRUCTION,
+                                   settings.embed_dimensions, text),
+            "kind": "query",
+            "item": {"type": "text", "text": text, "instructions": QUERY_INSTRUCTION},
+        }]
+        return (await self._embed_batch(jobs))[0]

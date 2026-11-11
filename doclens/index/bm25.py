@@ -85,3 +85,28 @@ def load_index(rebuild: bool = False) -> Bm25Index:
         return Bm25Index(chunk_ids=[], corpus=[])
     data = pickle.loads(CORPUS_PICKLE.read_bytes())
     return Bm25Index(chunk_ids=data["chunk_ids"], corpus=data["corpus"]).build()
+
+
+def load_units_from_db(doc_ids: list[str] | None = None) -> list[dict]:
+    """从 t_chunk 读文本单元（重建式增量的语料源——单一事实源，§3.1）。"""
+    from doclens.index.db import connect
+
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            if doc_ids:
+                ph = ",".join(["%s"] * len(doc_ids))
+                cur.execute(
+                    f"SELECT chunk_id, doc_id, kind, content FROM t_chunk "
+                    f"WHERE kind IN ('text','table','caption') AND doc_id IN ({ph})",
+                    doc_ids,
+                )
+            else:
+                cur.execute(
+                    "SELECT chunk_id, doc_id, kind, content FROM t_chunk "
+                    "WHERE kind IN ('text','table','caption')"
+                )
+            return [{"chunk_id": r[0], "doc_id": r[1], "kind": r[2], "content": r[3]}
+                    for r in cur.fetchall()]
+    finally:
+        conn.close()
