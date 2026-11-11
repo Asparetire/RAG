@@ -117,20 +117,29 @@ async def answer_question(question: str, profile_name: str, *, rerank_pro: bool 
         inp = cascade_input(list(cand_map.values()), top=profile.rerank_input) if tier == "pro" \
             else list(cand_map.values())[:profile.rerank_input]
         rerank_out = await rerank_candidates(question, inp, model_tier=tier)
-        ranking = rerank_out.ranking
-        # R2 证据组语义收尾（组员就地跟随代表）：
-        #   ① 代表若在 top-20 窗口内但其 group_members 组员（同图 caption↔image、同页
-        #      伙伴正文）不在 → 组员**就地展开**（跟在代表后）——否则图注代表一句话、
-        #      真证据在同页正文组员里，judge 只见图注判不充分 → 误拒（冒烟 s16 归因）；
-        #   ② 再按"窗口+展开后"截 final_top——去重后池（≈窗口×组均成员）天然超 20，
-        #      截断作用在展开序上保证组完整性优先于块数（FR-4.1 成本由图 ≤5 兜底）。
-        final_ranking = []
+        # B-1 修复：重排序为主干——组员就地展开必须作用在**重排输出**上（而非融合池序），
+        # 否则 LLM 重排（11s+token 费）对最终上下文零影响（审查 1bf4229 回归发现）。
+        # 步骤：① hit_by_id 映射（池 Hit 带组员/元数据）→ ② 按重排序遍历：代表后就地
+        # 展开组员 → ③ 重排序未覆盖的融合池 top-20 块补尾（101f0d1 保底）。
+        hit_by_id = {h.chunk_id: h for h in rr.pool}
+        final_ranking: list[str] = []
         seen: set[str] = set()
-        for h in rr.pool[:profile.final_top]:
-            for cid in [h.chunk_id, *h.group_members]:
-                if cid not in seen:
-                    seen.add(cid)
-                    final_ranking.append(cid)
+
+        def _push(cid: str) -> None:
+            if cid not in seen:
+                seen.add(cid)
+                final_ranking.append(cid)
+
+        for cid in rerank_out.ranking:
+            _push(cid)
+            h = hit_by_id.get(cid)
+            if h is not None:
+                for mid in h.group_members:
+                    _push(mid)
+        for h in rr.pool[:profile.final_top]:   # 保底：重排丢块/降级回退时的窗口补齐
+            _push(h.chunk_id)
+            for mid in h.group_members:
+                _push(mid)
         timings["rerank_ms"] = round((time.perf_counter() - t) * 1000, 1)
 
     # 4. 上下文组装（K4）——members 全字段回表（E 档前缀 t_ctx_prefix）
