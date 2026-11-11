@@ -136,11 +136,11 @@ async def answer_question(question: str, profile_name: str, *, rerank_pro: bool 
     # 4. 上下文组装（K4）——members 全字段回表（E 档前缀 t_ctx_prefix）
     meta = await asyncio.to_thread(_fetch_members, final_ranking)
     ctx_prefixes = None
-    if profile.use_ctx_prefix:
+    if profile.use_ctx_prefix and final_ranking:
         conn = connect()
         try:
             with conn.cursor() as cur:
-                ph = ",".join(["%s"] * len(final_ranking)) or "%s"
+                ph = ",".join(["%s"] * len(final_ranking))
                 cur.execute(
                     f"SELECT chunk_id, prefix FROM t_ctx_prefix WHERE chunk_id IN ({ph}) "
                     f"AND model=%s", (*final_ranking, settings.ctx_model))

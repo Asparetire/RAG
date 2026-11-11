@@ -48,3 +48,15 @@ def test_parse_error_message_masked_password():
     msg = str(ei.value)
     assert secret not in msg, "异常消息泄漏明文密码"
     assert "***" in msg  # 脱敏占位存在
+
+
+def test_parse_error_message_masked_password_no_at_sign():
+    """S4-10：URL 截断成 mysql+pymysql://u:SECRET（无 @）形态时密码同样不入异常。
+
+    旧脱敏正则要求密码段后有 @，此形态下 SECRET 明文泄漏（S4 复查本机实证）。"""
+    secret = "leaky-secret-456"
+    with pytest.raises(DBConfigError) as ei:
+        parse_mysql_url(f"mysql+pymysql://u:{secret}")
+    msg = str(ei.value)
+    assert secret not in msg, "无 @ 形态异常消息泄漏明文密码"
+    assert "***" in msg

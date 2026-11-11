@@ -33,7 +33,9 @@ def parse_mysql_url(url: str | None = None) -> dict:
     raw = (url if url is not None else settings.mysql_url).strip()
     m = _URL_RE.fullmatch(raw)
     if not m:
-        safe = re.sub(r"(://[^:@/]+:)[^@]*@", r"\1***@", raw)
+        # S4-10：脱敏正则去掉尾部 @ 要求——URL 截断成 mysql+pymysql://u:SECRET（无 @）
+        # 形态时密码同样不入异常（S4 复查附带发现，leak 实证后修复）
+        safe = re.sub(r"(://[^:@/]+:)[^@]*", r"\1***", raw)
         raise DBConfigError(f"MYSQL_URL 无法解析: {safe!r}（期望 mysql+pymysql://user:pwd@host:port/db）")
     return {
         "host": m.group("host"),
