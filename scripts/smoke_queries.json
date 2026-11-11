@@ -110,8 +110,8 @@
       "q_id": "s15_table_en",
       "type": "table",
       "lang": "en",
-      "question": "How many publications were found for decision tree research in the survey's literature search?",
-      "gold_hint": "7335e03ac56b Fig. 2 Number of publications...（检索统计图）+ Inclusion criteria 节；若证据在图，判定时按图表题口径"
+      "question": "What search criteria were used to find decision tree publications in the survey's literature search?",
+      "gold_hint": "7335e03ac56b Fig. 2 图注（检索式 TI=(tree*) AND TS=(classif* OR regress* OR decision)）+ Inclusion/Exclusion criteria 节；原题问柱状图具体数字（数字仅在图中、无文本可检回，属出题缺陷），已修正为图注可答事实"
     },
     {
       "q_id": "s16_table_zh",
