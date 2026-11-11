@@ -16,6 +16,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+# 支持 `python scripts/rebuild_docs.py` 直接执行（仓库根路径自举，与 quality_report 同法）
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from doclens.config import PARSED_DIR
 from doclens.parse.mineru_parser import build_doc
 
