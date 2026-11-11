@@ -5,6 +5,7 @@
 降级（可重试异常重试 1 次→回原序；非可重试不重试；解析全废）、空池/档位解析、cascade_input 截断。
 """
 import asyncio
+import inspect
 from types import SimpleNamespace
 
 import httpx
@@ -169,7 +170,10 @@ def test_rerank_cache_miss_calls_llm_and_writes(monkeypatch):
     assert out.ranking == ["c2", "c1"] and out.degraded is False and out.cache_hit is False
     assert out.usage_tokens == 123 and out.fail_reason is None
     assert out.model == settings.rerank_model_flash
-    expected_key = rerank_cache_key(settings.rerank_model_flash, 512, "Q", cands)
+    expected_key = rerank_cache_key(
+        settings.rerank_model_flash,
+        inspect.signature(rr.rerank_candidates).parameters["max_tokens"].default,
+        "Q", cands)  # 键与实现同源：max_tokens 取签名默认（M3 调优 512→256，魔法数字会漂）
     assert puts == [(expected_key, settings.rerank_model_flash, 2, ["c2", "c1"], False)]
 
 
