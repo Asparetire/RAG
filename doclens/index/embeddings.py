@@ -163,6 +163,7 @@ class EmbeddingClient:
         missing = [j for j, k in zip(jobs, keys) if k not in cached]
         fetched: dict[str, list[float]] = {}
         if missing:
+            # n-5：口径 = 发起嵌入的条数（批失败后整批重跑的每轮都累计，非成功数——2.8 汇总时注意）
             self.stats["api_calls"] += len(missing)
         if missing:
             async with httpx.AsyncClient() as client:
@@ -170,15 +171,23 @@ class EmbeddingClient:
                     *(self._post_one(client, j["item"]) for j in missing),
                     return_exceptions=True,
                 )
-            rows = []
+            rows, failed = [], []
             for j, r in zip(missing, results):
                 if isinstance(r, BaseException):
-                    raise EmbedError(f"嵌入失败 [{j['cache_key'][:12]}…]: {r}") from r
+                    failed.append((j, r))
+                    continue
                 fetched[j["cache_key"]] = r
                 rows.append((j["cache_key"], settings.embed_model, j["kind"], len(r),
                              vec_to_bytes(r)))
-            await asyncio.to_thread(_cache_put_many, rows)
-        return [cached.get(k) or fetched[k] for k in keys]
+            if rows:
+                # m-10：批内部分失败时，已成功兄弟请求的向量先落缓存再抛错
+                #（429 长退避场景下重跑整批不重复计费）
+                await asyncio.to_thread(_cache_put_many, rows)
+            if failed:
+                j, r = failed[0]
+                raise EmbedError(f"嵌入失败 [{j['cache_key'][:12]}…]: {r}") from r
+        # n-6：成员判断兜底（真值判断在向量恰为空列表时会 KeyError）
+        return [cached[k] if k in cached else fetched[k] for k in keys]
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """批量文本嵌入（缓存先行）。texts 顺序 = 返回顺序。"""

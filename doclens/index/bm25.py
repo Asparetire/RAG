@@ -20,7 +20,7 @@ from doclens.config import DATA_DIR
 
 BM25_DIR = DATA_DIR / "bm25"
 CORPUS_PICKLE = BM25_DIR / "corpus.pkl"      # list[list[str]] 分词后的 chunk 语料
-META_JSONL = BM25_DIR / "chunks.jsonl"       # 每行 {chunk_id, kind, page, doc_id}（与语料同序）
+META_JSONL = BM25_DIR / "chunks.jsonl"       # 每行 {chunk_id, doc_id, kind}（n-11：ingest.py 实际只传这三键）
 
 
 def tokenize(text: str) -> list[str]:

@@ -264,10 +264,34 @@ def _flat_text(raw: dict) -> str:
     if isinstance(c, str):
         return c
     if isinstance(c, list):
-        return "".join(
-            seg.get("content", "") for seg in c if isinstance(seg, dict) and isinstance(seg.get("content"), str)
+        # m-7：换行连接并跳过空段——"".join 会把 markdown 表各行粘连成一行
+        return "\n".join(
+            seg["content"] for seg in c
+            if isinstance(seg, dict) and isinstance(seg.get("content"), str) and seg["content"].strip()
         )
     return ""
+
+
+def _html_to_markdown(html: str) -> str:
+    """HTML 表格 → Markdown 线性化（v1 逻辑，原 mineru_parser._table_to_markdown；m-1 移入、m-6 复用）。
+
+    仅供网格化失败的降级路径：逐 <tr> 去标签输出 markdown 行，保住行结构；
+    连 <tr> 都没有的残缺 HTML 整体去标签拍平——绝不把原始标签塞进 chunk。
+    """
+    if "<table" not in html.lower():
+        return html
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I)
+    lines: list[str] = []
+    for row in rows:
+        cells = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S | re.I)
+        cells = [" ".join(re.sub(r"<[^>]+>", "", c).split()) for c in cells]
+        if cells:
+            lines.append("| " + " | ".join(cells) + " |")
+    if not lines:  # 残缺 HTML（无 <tr>）：整体去标签
+        return " ".join(re.sub(r"<[^>]+>", " ", html).split())
+    n = lines[0].count("|") - 1  # 首行当表头，插 Markdown 分隔行
+    lines.insert(1, "|" + "---|" * n)
+    return "\n".join(lines)
 
 
 # ---- ④ 输出组装 ----
@@ -333,8 +357,10 @@ def transform_table(
         "n_rows_clean": 0,
     }
     if not grid or not width:
-        # 防御：解析不出网格 → 退回 v1 式原样文本，manifest 记录降级
-        fallback = _flat_text(raw).strip()
+        # 防御：解析不出网格 → 退回降级文本，manifest 记录降级
+        # m-6：html 源先线性化/去标签（_html_to_markdown），不把 <table>… 原始标签塞进 chunk；
+        # markdown 源保持现状（原样文本）
+        fallback = _html_to_markdown(html).strip() if source == "html" else _flat_text(raw).strip()
         manifest["excluded"].append(
             {"where": "table", "type": "degraded", "reason": "网格化失败，保留原文本", "disposition": "原样保留"}
         )
@@ -347,6 +373,8 @@ def transform_table(
     header_rows = [candidates[i] for i in header_rows]  # 映射回原行号
     data_rows = [r for r in candidates if r not in header_rows]
     header_cols = _join_header(grid, header_rows, width)
+    # m-5：表头与数据行按同一 drop_cols 剔除，保列号对齐——否则整列空白时 markdown 表头与数据错位
+    header_cols = [v for c, v in enumerate(header_cols) if c not in drop_cols]
     has_header = any(header_cols)
     if not has_header:
         header_cols = []
@@ -376,7 +404,8 @@ def transform_table(
             tail.append("表注：" + " ".join(c.strip() for c in grid[r] if c.strip()))
         elif e["type"] == "total":
             r = int(e["where"].split()[1])
-            tail.append("汇总行：" + _build_body([grid[r]], [0], [], set()))
+            # m-5：汇总行同样按实际 drop_cols 剔列，与主体行宽对齐
+            tail.append("汇总行：" + _build_body([grid[r]], [0], [], drop_cols))
 
     body = _build_body(grid, data_rows, header_cols, drop_cols)
     manifest["n_rows_clean"] = len(data_rows)

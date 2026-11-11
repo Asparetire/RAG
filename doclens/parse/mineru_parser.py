@@ -109,23 +109,6 @@ def _image_path_lookup(middle: dict) -> dict[tuple[int, tuple[float, ...]], str]
     return lookup
 
 
-def _table_to_markdown(text: str) -> str:
-    """HTML 表格 → Markdown 线性化（PRD FR-1.3）；非 HTML 输入原样返回。"""
-    if "<table" not in text.lower():
-        return text
-    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", text, re.S | re.I)
-    lines: list[str] = []
-    for row in rows:
-        cells = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S | re.I)
-        cells = [" ".join(re.sub(r"<[^>]+>", "", c).split()) for c in cells]
-        if cells:
-            lines.append("| " + " | ".join(cells) + " |")
-    if len(lines) >= 1:  # 首行当表头，插 Markdown 分隔行
-        n = lines[0].count("|") - 1
-        lines.insert(1, "|" + "---|" * n)
-    return "\n".join(lines) if lines else text
-
-
 def _prefix_caption(caption: str | None) -> str | None:
     """可信图注 = Fig/Figure/图/Table/表 + 编号 开头；面板标签、句子碎片返回 None。"""
     if caption and (_FIG_PREFIX.match(caption) or _TBL_PREFIX.match(caption)):
@@ -171,12 +154,10 @@ def _fallback_caption(raw: dict, page_blocks: list[dict], self_idx: int) -> str 
 
 
 def build_doc(sha256: str, structured: dict, middle: dict, collect: list | None = None) -> DoclensDoc:
-    """structured+middle → DoclensDoc。
+    """structured+middle 两个 JSON → 统一文档模型（纯函数，单测直接喂夹具）。
 
     collect（可选）：传入 list 时，每个表格块的 manifest 会被追加进该列表
     （M2 表格 v2：调用方落盘 tables_manifest.json 用）；不传则行为与 M1 完全一致。
-    """
-    """两个 JSON → 统一文档模型。纯函数，单测直接喂夹具。
 
     图注绑定两阶段：
     ① 逐块先记 MinerU 原始图注；② 页级收尾——不可信图注（面板标签/碎片）
@@ -238,11 +219,13 @@ def build_doc(sha256: str, structured: dict, middle: dict, collect: list | None 
                 text, table_manifest = table_struct.transform_table(
                     raw, caption=caption, page=page_no, order=order, doc_id=sha256[:12]
                 )
-                if not text:
-                    continue
+                # m-3：manifest 先入清单再判空——空表（自带 degraded 记录）不产块，
+                # 但必须留在 tables_manifest.json，125 表全量人工审计不能有盲区
                 if collect is not None:
                     table_manifest["caption"] = caption  # 绑定后的图注回填清单
                     collect.append(table_manifest)
+                if not text:
+                    continue
                 blocks.append(
                     Block(
                         type="table",

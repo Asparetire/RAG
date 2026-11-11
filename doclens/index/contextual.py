@@ -20,6 +20,9 @@ from doclens.index.db import connect
 
 CTX_CONCURRENCY = 4
 CTX_MAX_TOKENS = 200
+CTX_RETRIES = 3         # 单块生成重试上限（m-11：对齐 embeddings K3 容错策略，瞬时 429 不再全批报废）
+CTX_BACKOFF_BASE = 2.0  # 指数退避基数
+CTX_BACKOFF_MAX = 60.0  # 单次退避上限
 CTX_PROMPT_TEMPLATE = (
     "以下是一篇论文中的一个块（chunk），以及它所属的全文标题与章节路径。"
     "请用不超过 100 个 token 的中文语境前缀描述这个块的上下文：它出现在论文的哪个部分、"
@@ -94,6 +97,8 @@ async def generate_prefixes(doc_title: str, chunks: list[dict], *,
     """为 chunks 生成前缀并落缓存（已有缓存且 model 相同的块跳过）。返回 chunk_id→prefix。
 
     chunks 元素：{chunk_id, content, heading_path}。
+    失败隔离（m-11）：单块重试耗尽后跳过不落库、汇总日志，不影响批内其他块；
+    返回 dict 只含成功条目。
     """
     loop = asyncio.get_running_loop()
     client = OpenAI(api_key=settings.ark_api_key, base_url=settings.ark_base_url)
@@ -104,16 +109,32 @@ async def generate_prefixes(doc_title: str, chunks: list[dict], *,
     done: dict[str, str] = {}
     if todo:
         sem = asyncio.Semaphore(concurrency)
+        failures: list[tuple[str, str]] = []
 
-        async def run(c: dict) -> tuple[str, str]:
-            async with sem:
-                prefix = await loop.run_in_executor(None, _gen_one, client, doc_title, c)
-                return c["chunk_id"], prefix
+        async def run(c: dict) -> tuple[str, str] | None:
+            last: Exception | None = None
+            for attempt in range(1, CTX_RETRIES + 1):
+                try:
+                    async with sem:  # LLM 调用限并发；退避 sleep 在信号量外（对齐 K3：占位不放大）
+                        prefix = await loop.run_in_executor(None, _gen_one, client, doc_title, c)
+                    return c["chunk_id"], prefix
+                except Exception as exc:  # noqa: BLE001 单块失败隔离，重试耗尽后跳过
+                    last = exc
+                if attempt < CTX_RETRIES:
+                    await asyncio.sleep(min(CTX_BACKOFF_MAX, CTX_BACKOFF_BASE ** attempt))
+            failures.append((c["chunk_id"], str(last)))
+            return None
 
         results = await asyncio.gather(*(run(c) for c in todo))
-        rows = [(cid, p, settings.ctx_model) for cid, p in results]
-        await loop.run_in_executor(None, _prefix_put_many, rows)
-        done.update(rows and {cid: p for cid, p in results})
+        ok = [r for r in results if r is not None]
+        rows = [(cid, p, settings.ctx_model) for cid, p in ok]
+        if rows:
+            await loop.run_in_executor(None, _prefix_put_many, rows)
+            done.update({cid: p for cid, p in ok})
+        if failures:
+            ids = ", ".join(cid for cid, _ in failures)
+            print(f"[警告] generate_prefixes: {len(failures)}/{len(todo)} 块重试 {CTX_RETRIES} 次"
+                  f"后仍失败，跳过不落库: {ids[:500]}")
     return done
 
 

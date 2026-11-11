@@ -1,4 +1,7 @@
-"""contextual 单测（m2-runbook 2.6）：分层抽样纯逻辑（试产名额分配）+ 提示词装配。不调 API。"""
+"""contextual 单测（m2-runbook 2.6）：分层抽样纯逻辑（试产名额分配）+ 提示词装配 + 失败隔离。不调 API。"""
+import asyncio
+
+import doclens.index.contextual as ctx
 from doclens.index.contextual import CTX_PROMPT_TEMPLATE, stratified_sample
 
 
@@ -44,3 +47,38 @@ def test_prompt_template_fields():
     s = CTX_PROMPT_TEMPLATE.format(doc_title="T", heading="A / B", chunk="chunk body")
     assert "T" in s and "A / B" in s and "chunk body" in s
     assert "只输出前缀本身" in s  # 防解释污染
+
+
+def test_generate_prefixes_failure_isolation(monkeypatch):
+    """m-11：单块 LLM 调用重试耗尽 → 跳过不落库、不影响其余块成功落库（缓存跳过/落库均 monkeypatch，不连真库）。"""
+    monkeypatch.setattr(ctx, "CTX_RETRIES", 2)
+    monkeypatch.setattr(ctx, "CTX_BACKOFF_BASE", 0.0)  # 退避 0s，测试不等待
+    monkeypatch.setattr(ctx, "OpenAI", lambda **kwargs: object())  # 不触真实客户端
+    monkeypatch.setattr(ctx, "_prefix_get_existing", lambda ids, model: set())
+    saved: dict[str, str] = {}
+    monkeypatch.setattr(ctx, "_prefix_put_many",
+                        lambda rows: saved.update({r[0]: r[1] for r in rows}))
+
+    calls: list[str] = []
+
+    def fake_gen_one(client, doc_title, chunk):
+        calls.append(chunk["chunk_id"])
+        if chunk["chunk_id"] == "d:0001":
+            raise RuntimeError("LLM 瞬时 429")
+        return f"前缀-{chunk['chunk_id']}"
+
+    monkeypatch.setattr(ctx, "_gen_one", fake_gen_one)
+
+    chunks = [
+        {"chunk_id": "d:0000", "content": "a", "heading_path": ["S"]},
+        {"chunk_id": "d:0001", "content": "b", "heading_path": ["S"]},
+        {"chunk_id": "d:0002", "content": "c", "heading_path": ["S"]},
+    ]
+    done = asyncio.run(ctx.generate_prefixes("T", chunks))
+    # 失败条目：重试 CTX_RETRIES 次后仍不在返回值、不落库
+    assert calls.count("d:0001") == 2
+    assert "d:0001" not in done and "d:0001" not in saved
+    # 成功条目不受影响：返回且落库，各只调 1 次
+    assert done == {"d:0000": "前缀-d:0000", "d:0002": "前缀-d:0002"}
+    assert saved["d:0000"] == "前缀-d:0000" and saved["d:0002"] == "前缀-d:0002"
+    assert calls.count("d:0000") == 1 and calls.count("d:0002") == 1

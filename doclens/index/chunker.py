@@ -8,7 +8,8 @@
 - 内容过滤：References/Bibliography 节不入库；页眉页脚 = 无标题归属 + 短文本 +
   **跨页重复出现 ≥2 次**才丢弃（RAGFlow 先例，单次出现保留防误删，调研 R1）；
 - 索引单元：text（聚合块）/ table（1 表 1 chunk，含卡片）/ caption（有图注图 → 图注文本块）
-  / image（每图 1 单元，content=caption 可空——供图像向量入库，无图注图仅此一路，调研 R5）；
+  / image（每图 1 单元，content=caption 可空——供图像向量入库，无图注图仅此一路，调研 R5；
+  无图注且无 image_path 的空图单元不产出，m-8）；
 - chunk_id = `{doc_id}:{doc 内序号}`（全单元统一递增，幂等入库与回表的联接键）。
 """
 
@@ -26,7 +27,8 @@ RUNNING_HEAD_REPEATS = 2  # 跨页重复 ≥2 次才判垃圾（RAGFlow 先例�
 
 # 句切分：句末标点 + 空白 + 常见句首字符（缩写误切代价低，接受）
 _SENT_RE = re.compile(r'(?<=[.!?])\s+(?=[A-Z0-9"(\\\[$<])')
-_REFERENCE_RE = re.compile(r"^(references|bibliography|参考文献)\b", re.IGNORECASE)
+# m-4：放开可选编号前缀——"4. References"/"5 参考文献"等编号型标题同样命中
+_REFERENCE_RE = re.compile(r"^\s*(?:\d+[.:：]?\s*)?(references|bibliography|参考文献)\b", re.IGNORECASE)
 
 
 @dataclass
@@ -105,6 +107,8 @@ def chunk_doc(doc: DoclensDoc) -> list[Chunk]:
     def emit(kind: str, content: str, page: int, bbox: list[float] | None,
              hp: list[str], image_path: str | None = None, caption: str | None = None) -> None:
         nonlocal seq
+        if kind == "image" and not content and not image_path:
+            return  # m-8：无图注且无文件路径的空图单元不产 chunk（t_chunk 空行、Qdrant 无点，验收对不齐）
         if not content.strip() and kind != "image":
             return
         out.append(Chunk(

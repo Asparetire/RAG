@@ -26,10 +26,12 @@ class DBConfigError(ValueError):
 def parse_mysql_url(url: str | None = None) -> dict:
     """解析 MYSQL_URL → pymysql.connect 参数 dict；密码 URL 解码（含特殊字符时 .env 里可 %-encode）。
 
+    锚定匹配（m-12：re.fullmatch）——库名只接受 \\w+（连字符等字符会直接报错，而非静默截断
+    连错库），**不支持 query 参数**（?charset=… 会被拒；charset 固定 utf8mb4）。
     安全约定（S4-01）：解析失败的异常消息**必须脱敏**——密码不入错误信息/日志（m2-runbook §8）。
     """
     raw = (url if url is not None else settings.mysql_url).strip()
-    m = _URL_RE.match(raw)
+    m = _URL_RE.fullmatch(raw)
     if not m:
         safe = re.sub(r"(://[^:@/]+:)[^@]*@", r"\1***@", raw)
         raise DBConfigError(f"MYSQL_URL 无法解析: {safe!r}（期望 mysql+pymysql://user:pwd@host:port/db）")
@@ -49,4 +51,6 @@ def connect(url: str | None = None, **overrides):
 
     cfg = parse_mysql_url(url)
     cfg.update(overrides)
+    # n-9：connect_timeout 兜底 10s（库不可达时不挂 OS 级超时）；overrides 可覆盖
+    cfg.setdefault("connect_timeout", 10)
     return pymysql.connect(**cfg, autocommit=True)

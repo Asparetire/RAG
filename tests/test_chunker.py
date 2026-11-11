@@ -117,6 +117,19 @@ def test_references_section_skipped():
     assert cs[0].content.endswith("Body text.")
 
 
+def test_numbered_references_heading_skipped():
+    """m-4：编号型 References 标题（"4. References"/"5 参考文献"）同样过滤，不漏进 BM25。"""
+    doc = DOC
+    doc.blocks = [
+        blk("text", "Body text.", hp=["3. Methods"]),
+        blk("text", "Smith J. Paper title. 2023.", hp=["4. References"]),
+        blk("text", "Doe A. Another. 2024.", hp=["5 参考文献"]),
+    ]
+    cs = chunk_doc(doc)
+    assert kinds(cs) == ["text"]
+    assert cs[0].content.endswith("Body text.")
+
+
 def test_running_head_repeated_dropped_single_kept():
     """R1：无归属短块跨页重复 ≥2 次丢弃；单次出现保留；有归属不判页眉页脚。"""
     doc = DOC
@@ -167,6 +180,19 @@ def test_image_without_caption_emits_image_only():
     assert kinds(cs) == ["image"]
     assert cs[0].content == "" and cs[0].caption is None
     assert cs[0].image_path == "images/page_5_image_2.jpg"
+
+
+def test_image_bare_and_pathless_skipped():
+    """m-8：无图注且无 image_path 的空图单元直接跳过不 emit（否则 t_chunk 空行与 Qdrant 点数对不齐）。"""
+    doc = DOC
+    doc.blocks = [
+        blk("image", "", page=3, hp=["S"], caption="Fig. 1 | 有图注无路径。"),
+        blk("image", "", page=4, hp=["S"]),  # 双无 → 跳过，不占 chunk_id 序号
+    ]
+    cs = chunk_doc(doc)
+    assert kinds(cs) == ["caption", "image"]  # 仅第 1 图的双路单元
+    assert cs[0].image_path is None and cs[1].image_path is None
+    assert [c.chunk_id for c in cs] == ["abc123def456:0000", "abc123def456:0001"]
 
 
 # ---- 标识与哈希 ----

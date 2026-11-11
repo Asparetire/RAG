@@ -35,13 +35,14 @@ DDL = [
         updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文档元数据（m2-runbook §3.1）'
     """,
-    # 块级单一事实源：chunk_id = doc_id:0000（17 字符）；content 最长为表格卡片+markdown（实测 max≈7KB）
+    # 块级单一事实源：chunk_id = doc_id:0000（17 字符）；content 最长为表格卡片+markdown（实测 max≈7KB；
+    # n-12：TEXT 64KB 余量偏紧且与写库失败叠加会半写 → MEDIUMTEXT 16MB）
     """
     CREATE TABLE IF NOT EXISTS t_chunk (
         chunk_id     VARCHAR(32)  NOT NULL PRIMARY KEY,
         doc_id       VARCHAR(16)  NOT NULL,
         kind         ENUM('text','table','caption','image') NOT NULL,
-        content      TEXT         NOT NULL,
+        content      MEDIUMTEXT   NOT NULL,
         page         INT          NOT NULL,
         bbox         JSON         NULL COMMENT '[x0,y0,x1,y1] 0–1 归一化（FR-2.4 坐标）',
         heading_path JSON         NULL,

@@ -135,7 +135,7 @@ def test_pseudocode_table_no_header():
     assert "【列】" not in content
     # 数据行不丢
     assert "Update the HS" in content
-    assert "| --- |" not in content.split("\n\n")[1] if "\n\n" in content else True
+    assert "| --- |" not in content  # m-13：无表头即无分隔行（直接断言，不取段）
 
 
 def test_form_table_full_width_first_row():
@@ -163,6 +163,16 @@ def test_degraded_empty_content():
     content, man = transform_table({"content": "not a table"}, caption=None, page=1, order=6)
     assert content == "not a table"
     assert man["excluded"][0]["type"] == "degraded"
+
+
+def test_degraded_html_source_strips_tags():
+    """m-6：HTML 源网格化失败 → 降级文本先去标签/线性化，不把原始 <table> 标签塞进 chunk。"""
+    html = "<table><caption>x</caption>no rows</table>"
+    content, man = transform_table({"content": html}, caption=None, page=1, order=10)
+    assert man["source"] == "html"
+    assert man["excluded"][0]["type"] == "degraded"
+    assert "<" not in content and ">" not in content  # 原始标签不入 chunk
+    assert "no rows" in content
 
 
 def test_excluded_structure_fields():

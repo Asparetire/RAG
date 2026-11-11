@@ -14,6 +14,7 @@ from __future__ import annotations
 import uuid
 
 from qdrant_client import QdrantClient, models
+from qdrant_client.http import exceptions as qdrant_errors
 
 from doclens.config import settings
 
@@ -56,8 +57,11 @@ def ensure_collections(client: QdrantClient | None = None) -> list[str]:
                             (IMAGE_COLLECTION, "doc_id")):
             try:
                 c.create_payload_index(name, field, models.PayloadSchemaType.KEYWORD)
-            except Exception:  # noqa: BLE001 已存在/旧版无此 API → 忽略
-                pass
+            except (qdrant_errors.ApiException, qdrant_errors.ResponseHandlingException,
+                    qdrant_errors.UnexpectedResponse) as e:
+                # n-15：只吞 qdrant 异常（索引已存在/旧版无此 API），记日志不静默；
+                # 连接错误（httpx 系）不再被吞，直接暴露
+                print(f"[警告] create_payload_index {name}.{field} 跳过（已存在或旧版无此 API）: {e}")
         return sorted(n for n in (TEXT_COLLECTION, IMAGE_COLLECTION))
     finally:
         if own:
@@ -111,8 +115,11 @@ def upsert_units(client: QdrantClient, units: list[dict]) -> dict[str, int]:
 def search_tier(client: QdrantClient, vec: list[float], tier: str = "B", top: int = 20,
                 doc_ids: list[str] | None = None) -> list[models.ScoredPoint]:
     """文本集合按档位检索（A=text，B=text+table+caption；FR-2.7 元数据过滤留 doc_ids 参数）。"""
+    if tier not in TIER_KINDS:
+        # n-15：未知 tier 一律报错——原实现静默等价 B 档，消融实验数据会被静默污染
+        raise ValueError(f"未知 search_tier: {tier!r}（可选: {sorted(TIER_KINDS)}）")
     must = []
-    kinds = TIER_KINDS.get(tier)
+    kinds = TIER_KINDS[tier]
     if kinds:
         must.append(models.FieldCondition(key="kind", match=models.MatchAny(any=kinds)))
     if doc_ids:

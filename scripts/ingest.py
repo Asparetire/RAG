@@ -3,7 +3,7 @@
 流程（每篇）：
   doc.json hash 对比 t_doc → 未变整篇跳过（零 API + 零写入）
   → chunk_doc 切块 → 文本单元嵌入（缓存先行）/ 图像单元嵌入（长边>1024px 先降采样，调研 R4）
-  → Qdrant 先删后插（uuid5 点 ID）→ MySQL t_chunk 先删后插 → t_doc upsert
+  → Qdrant 先删后插（uuid5 点 ID）→ MySQL 单事务写入：t_doc upsert（外键父表）→ t_chunk 先删后插
 收尾：BM25 从 t_chunk 全量重建（~1500 块秒级）+ 汇总输出（API 次数/缓存命中/点数——2.8 验收证据）。
 
 用法（容器内 doclens 环境）：
@@ -100,7 +100,7 @@ def _write_chunks(conn, doc: DoclensDoc, rows: list[tuple], doc_hash: str) -> No
 
 
 def process_doc(client: EmbeddingClient, qclient, conn, doc_dir: Path, force: bool) -> dict:
-    """处理单篇：返回统计 {doc_id, skipped, n_units, n_img, downsampled}。"""
+    """处理单篇：返回统计 {doc_id, skipped, n_text, n_img, downsampled, written}（n-2：口径对齐实际键）。"""
     doc_json = doc_dir / "doc.json"
     doc = DoclensDoc.load(doc_json)
     dh = _file_hash(doc_json)
@@ -136,7 +136,8 @@ def process_doc(client: EmbeddingClient, qclient, conn, doc_dir: Path, force: bo
         blobs, reused = [], []
         for _c, p in img_pairs:
             small = await asyncio.to_thread(_downsample_bytes, p)
-            blobs.append(small if small is not None else p.read_bytes())
+            # m-9：回退分支的同步读同样经 to_thread（§3.1 纪律：同步 IO 不上事件循环）
+            blobs.append(small if small is not None else await asyncio.to_thread(p.read_bytes))
             reused.append(small is not None)
         vecs_i = await client.embed_image_blobs(blobs)
         return vecs_t, vecs_i

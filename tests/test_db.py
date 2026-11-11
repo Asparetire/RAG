@@ -28,6 +28,17 @@ def test_parse_url_invalid_raises():
             parse_mysql_url(bad)
 
 
+def test_parse_url_rejects_hyphen_db_and_trailing_garbage():
+    """m-12：锚定匹配（fullmatch）——库名带连字符/尾随垃圾/query 参数一律报错，不静默截断连错库。"""
+    for bad in (
+        "mysql+pymysql://u:p@h:3306/doclens-bad",           # 连字符：旧实现截断成 doclens 静默连错库
+        "mysql+pymysql://u:p@h:3306/doclens?charset=utf8",  # query 参数不支持
+        "mysql+pymysql://u:p@h:3306/doclens/trash",         # 尾随垃圾
+    ):
+        with pytest.raises(DBConfigError):
+            parse_mysql_url(bad)
+
+
 def test_parse_error_message_masked_password():
     """S4-01：解析失败的异常消息不得含明文密码（密码不入错误信息）。"""
     secret = "super-secret-pwd-123"
