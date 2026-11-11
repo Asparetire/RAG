@@ -1,6 +1,6 @@
 # M2 索引 Runbook
 
-> **状态：待确认（停在确认门 G1）** ｜ slug：`m2-indexing` ｜ 依据：[主计划 §5 M2](doclens-multimodal-rag.plan.md)、[PRD FR-2.1~2.6](../prds/doclens-multimodal-rag.prd.md)、[m1-runbook](m1-runbook.md)（M1 产物即 M2 原料）
+> **状态：已收官（2026-11-11 tag m2）** ｜ slug：`m2-indexing` ｜ 依据：[主计划 §5 M2](doclens-multimodal-rag.plan.md)、[PRD FR-2.1~2.6](../prds/doclens-multimodal-rag.prd.md)、[m1-runbook](m1-runbook.md)（M1 产物即 M2 原料）
 > **用户决策（2026-11-11）**：① 解析维持 **CPU 方案**（GPU 探针实验入待办池，将来批量扩语料再做）；② 表格多级表头处理（表格 v2）**并入 M2 开工首项**；③ 实现方式默认延续**普通实现**（不走 TDD）；④ 表格 v2 升级为**结构理解管线（规则版）**——区分列名/行名、剔除无效区域、输出 manifest、125 表全量人工审计；LLM/VLM 仲裁留待财报泛化包（2026-11-11 评审选档）
 > **评审修订（2026-11-11，随 G1 一并确认）**：§4 步骤编号修正、幂等写入机制、t_chunk 回表（补 FR-2.4 坐标与正文取回）、K1 内容过滤与切块细则、表格卡片、风险表补充——详见 §3.1 及各节标注；同类项目调研（[m2-indexing-survey](../research/m2-indexing-survey.md)）印证主线方案，R1–R6 小修订已并入（正文标注"调研 R#"）
 
@@ -63,7 +63,8 @@
 | 新增 | `doclens/index/contextual.py` | E 档前缀生成 + 缓存（2.6） |
 | 新增 | `scripts/init_db.py` | 5 张表幂等创建（2.2） |
 | 新增 | `scripts/ingest.py` | 全量/增量编排入口：doc 级跳过 / 先删后插 + 收尾汇总（2.7） |
-| 新增 | `scripts/search_probe.py` | 10 查询抽查工具（2.7；查询清单版本化存 `data/probe_queries.json`，M5 可复用对照；M3 被 hybrid 取代） |
+| 新增 | `scripts/search_probe.py` | 10 查询抽查工具（2.7；查询清单版本化存 **scripts/probe_queries.json**——data/ 被 gitignore、验收资产需入库，收官补记路径变更；M3 被 hybrid 取代） |
+| 新增 | `scripts/rebuild_docs.py` | 表格 v2 缓存重建 11 篇 + tables_manifest.json 落盘（2.0；S3 审查补记漏项） |
 | 修改 | `scripts/quality_report.py` | 表格 manifest 审计汇总（2.0） |
 | 新增 | `tests/test_table_struct.py`、`tests/test_chunker.py` 等 | 每模块关键路径单测（表格夹具取真实难表） |
 | 修改 | `reports/cost.md`、`CHANGELOG.md`、`AGENTS.md` | 记录 |

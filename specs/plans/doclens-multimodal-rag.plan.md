@@ -144,14 +144,17 @@ doclens/
 | 1.3 | `mineru_parser.py`：CLI 桥接 → content list → schema 映射；**图注绑定**（就近 + Figure/Table 前缀识别）；表格 HTML→Markdown 线性化；sha256 缓存 | 抽检绑定率 ≥90% | doclens/parse |
 | 1.4 | `quality.py` 质检报告（P1，紧则砍） | 报告可审阅 | doclens/parse |
 
-### M2 索引（1 天）
+### M2 索引（2 天；runbook 修订：表格 v2 结构理解管线 + chunker 并入，2026-11-11 实施收官）
 | 步 | 任务 | 验收 | 影响面 |
 |---|---|---|---|
-| 2.1 | `embeddings.py`：文本/图像嵌入客户端（同模型分侧指令）+ MySQL 嵌入缓存 | 同输入二次调用零 API 费用 | doclens/index |
-| 2.2 | `qdrant_store.py`：text/image 两集合 + payload（url 模式接服务器 Qdrant） | 插入/查询/元数据过滤可用 | doclens/index |
-| 2.3 | `bm25.py`：索引构建（jieba+空格混合分词） | 中文/英文查询都能命中 | doclens/index |
-| 2.4 | `contextual.py`（E 档）：块前缀生成 + 缓存 | 100 块生成成本与耗时入核算表 | doclens/index |
-| 2.5 | `ingest.py` 全量入口（增量） | 10 篇入库；抽查 10 查询 top-5 相关 | scripts |
+| 2.0 | **表格 v2**：`table_struct.py` 结构理解管线（网格化+span 补全+无效区域剔除+列名/行名判定+manifest）+ 缓存重建 11 篇 + 125 表全量人工审计 | 列名/行名正确、无效内容零混入；两级表头拼接（`一级/二级`） | doclens/parse |
+| 2.0b | `chunker.py`：节内聚合 800–1600 字符（heading 前缀随行）+ References/页眉页脚过滤（原计划无此文件，随表格 v2 并入 M2） | 真实语料切块分布合理；过滤规则生效 | doclens/index |
+| 2.1 | `embeddings.py`：文本/图像嵌入客户端（同模型分侧指令）+ MySQL 嵌入缓存 | 同输入二次调用零 API 费用（实测 ✓） | doclens/index |
+| 2.2 | `init_db.py` 建五张表（幂等） | SHOW TABLES 5 张齐 | scripts |
+| 2.3 | `qdrant_store.py`：text/image 两集合 + payload（url 模式）+ uuid5 点 ID | 插入/查询/元数据过滤可用；重跑点数不变 | doclens/index |
+| 2.4 | `bm25.py`：索引构建（jieba 中英分词）+ 重建式增量 | 中文/英文查询都能命中 | doclens/index |
+| 2.5 | `contextual.py`（E 档）：块前缀生成 + 缓存 + 100 块分层试产 | 100 块生成成本与耗时入核算表 | doclens/index |
+| 2.6 | `ingest.py` 全量/增量入口（doc 级跳过 + 先删后插）+ `search_probe.py` | 11 篇入库；重跑零 API；抽查 10 查询 top-5 相关 | scripts |
 
 ### M3 检索 + 生成 CLI（2 天）
 | 步 | 任务 | 验收 | 影响面 |

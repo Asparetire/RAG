@@ -78,6 +78,23 @@
 - **过程记录**：① 沙箱曾拦 `.git` 写入（ACL 检查正常，属沙箱策略；放行后正常）；② 容器 git pull 曾被 scp 遗留的本地改动挡住（checkout 后恢复，教训：容器侧文件只走 git，不再 scp 同步已入库文件）；③ PS 5.1 引号传递多次坑 ssh 远程命令（改为无嵌套引号或脚本文件方案）。
 - 新增待办：无。下一站 M2 索引（embeddings/qdrant/bm25/contextual + ingest.py）。
 
+## 2026-11-11｜feat：M2 索引里程碑收官（git tag m2）——2.0–2.8 全链路实测验收通过
+
+- **2.0 表格 v2 结构理解管线**（`doclens/parse/table_struct.py`）：HTML 网格化（rowspan/colspan 复制补全）→ 无效区域规则标记（空白/分隔/脚注/合计/全宽说明行；MinerU 原生 footnotes 直接利用）→ 清洗后网格判列名/行名（"一级/二级"拼接、保守判定）→ manifest 随 tables_manifest.json 落盘；重建 11 篇 125 表全出清单（html 64 / markdown 61 与抽查预测一致）；`reports/table_audit_m2.md` 全量审计报告产出（125 表人工过目待用户完成，不阻塞）。
+- **2.1 chunker**（`doclens/index/chunker.py`）：节内聚合 800–1600 字符 + heading 前缀不占预算 + References（1202 块）/页眉页脚跨页重复（R1）过滤；真实语料 **1513 单元**（text 857 + caption 202 + table 125 + image 329，比预估省 38%），正文预算零超限。
+- **2.2 init_db**：MySQL 五张表幂等创建（t_doc/t_chunk/t_embed_cache/t_ctx_prefix/t_eval_result）+ 共享连接助手 `db.py`。
+- **2.3 embeddings**：单条请求 + asyncio 并发 + 指数退避 + t_embed_cache 缓存先行（键=sha256(model+instruction+dim+content)）；**实测二次调用零 API 费**；图像探针（调研 R4）：33KB 图降采样 1024px 余弦 0.9851 → 决策仅对长边 >1024px 的图降采样。
+- **2.4 qdrant_store**：doclens_text/doclens_image 两集合 + uuid5 确定性点 ID + 先删后插 + A/B 档 kind 过滤；容器集成验收 5/5。
+- **2.5 bm25**：jieba 中英分词 + 重建式增量（BM25Okapi 不可 extend 的正确替代）+ 分词语料 pickle/元数据 jsonl 落盘。
+- **2.6 contextual**：E 档前缀生成 + t_ctx_prefix 缓存 + 分层抽样；**100 块试产 100% 成功**（269.7s，deepseek-v4-flash，成本入 cost.md）。
+- **2.7 ingest**：doc 级跳过（doc.json hash）/先删后插/图像降采样探针/收尾汇总输出；**全量入库 1513 点落位**（Qdrant text 1184 + image 329，BM25 1184 文本单元，API 调用 1059）。
+- **2.8 实测验收三线全过**：①全量入库点数对账一致 ✓；②增量幂等——重跑 11 篇全跳过、**零 API 调用**、点数不变、2.6s ✓；③10 条中文查询抽查——跨语言命中准确、caption/表格单元参与检索生效（BM25 召回 PSNR 表格）、References 零混入 ✓。
+- **实施三连修（真实缺陷）**：t_doc 先写（外键）/Semaphore 懒绑定（跨 asyncio.run）/429 账号限流降并发 2 + 退避加深（6 次指数）。
+- **S3 代码审查**（`specs/reviews/m2-indexing.review.md`）：Blocker 0 / Major 2 / Minor 13 / Nit 17——Major 双修（写库事务原子性 conn.begin、E 档缓存按 model 跳过）+ 补合计行断言；Minor/Nit 记录在案排 M3。
+- **S4 安全复查**（`specs/reviews/m2-indexing.security.md`）：结论**通过**——S4-01 密码脱敏修复+单测、S4-02 边界取证（**3306/6333 宿主机外部均不可达**，明文面限 docker 桥接内网）、S4-03 图像路径越界守卫、S4-04 pickle 纪律。
+- **双端同步降级**：容器连 GitHub 持续超时（443 全挂），按 scp 同步代码（容器侧无本地改动，网络恢复后 pull 对齐）；`pytest` 双端 65 passed 全绿。
+- 待办移交：①125 表人工审计（用户，报告就绪）；②AGENTS"Windows 侧 .env 写 10.14.50.123"约定实际不可达，M3 前勘误；③requirements.txt 版本锁定 + 容器 pip-audit；④S3 Minor 清单（表头 drop_cols 过滤、编号型 References 标题、contextual 单块失败重试等）排 M3 首项。
+
 ## 2026-11-11｜docs：M2 runbook 终稿定稿（评审修订+同类调研）并获 G1 批准开工
 
 - M2 runbook 评审修订并入：新增 §3.1 实施细则（幂等写入=doc 级跳过 + uuid5 点 ID + 先删后插；t_chunk 单一事实源回表，补 FR-2.4 坐标与正文取回；表格卡片；K1 References/碎片过滤；PyMySQL 异步注意），§4 步骤编号错位修正，BM25 改重建式增量，风险表 +3。
