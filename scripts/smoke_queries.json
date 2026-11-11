@@ -1,0 +1,148 @@
+{
+  "version": "m3-smoke-v1",
+  "note": "M3 冒烟 20 题（m3-runbook K8/0.2）：可回答 16（纯文本 6 / 图表 5 / 表格 5，含中英对照 3 对）+ 不可回答 4。gold_hint 供验收人定位证据与判定通过/失败；不参与检索（避免给检索层作弊提示）。中英对照对 = 同一事实用 zh/en 各问一次（q_id 后缀 _zh/_en）。语料=11 篇（M2 全量）。",
+  "queries": [
+    {
+      "q_id": "s01_text_zh",
+      "type": "text",
+      "lang": "zh",
+      "question": "Kapur 方法和 Otsu 方法分别是用来做什么的？",
+      "gold_hint": "13c8e91b3467 §2.1 Kapur method / §2.2 Otsu method（多级阈值分割的问题表述）"
+    },
+    {
+      "q_id": "s02_text_en",
+      "type": "text",
+      "lang": "en",
+      "question": "What is the ε-greedy implementation used for in the Q-learning driven DE algorithm?",
+      "gold_hint": "5bec341c3134 §3.1.2 --greedy implementation（QDEHHO 的两级策略-参数决策）"
+    },
+    {
+      "q_id": "s03_text_zh",
+      "type": "text",
+      "lang": "zh",
+      "question": "深度学习和传统机器学习的区别是什么？",
+      "gold_hint": "5db85404be42 Background/Why deep learning 节 + Fig.3（深度学习与传统机器学习的区别）",
+      "pair_of": "s04_text_en"
+    },
+    {
+      "q_id": "s04_text_en",
+      "type": "text",
+      "lang": "en",
+      "question": "What are the differences between deep learning and traditional machine learning?",
+      "gold_hint": "5db85404be42 Background/Why deep learning 节 + Fig.3",
+      "pair_of": "s03_text_zh"
+    },
+    {
+      "q_id": "s05_text_zh",
+      "type": "text",
+      "lang": "zh",
+      "question": "什么是贝叶斯教学（Bayesian teaching）？它如何帮助大语言模型做概率推理？",
+      "gold_hint": "6ebe216067e3 Results/The Bayesian Assistant/Teaching LLMs to approximate Bayesian reasoning"
+    },
+    {
+      "q_id": "s06_text_en",
+      "type": "text",
+      "lang": "en",
+      "question": "According to the STRATOS initiative, what is IDA (initial data analysis) and why does it matter?",
+      "gold_hint": "69b72d2b0341 Background/STRATOS topic group TG9 + Results/IDA 节"
+    },
+    {
+      "q_id": "s07_fig_zh",
+      "type": "figure",
+      "lang": "zh",
+      "question": "鲸鱼优化算法（WOA）的伪代码流程包含哪些主要阶段？",
+      "gold_hint": "f9807c0c485e Algorithm 1 Pseudo-code of WOA（算法块）+ Preliminaries/Whale optimization algorithm 节"
+    },
+    {
+      "q_id": "s08_fig_en",
+      "type": "figure",
+      "lang": "en",
+      "question": "What are the various stages of Harris hawks optimization shown in the paper?",
+      "gold_hint": "5bec341c3134 Fig. 2 The various stages of HHO（图）+ §2.2 Harris hawks optimization"
+    },
+    {
+      "q_id": "s09_fig_zh",
+      "type": "figure",
+      "lang": "zh",
+      "question": "压力容器设计问题的示意图里包含哪些设计变量？",
+      "gold_hint": "3627b932f186 Fig. 2 The schematic structure of pressure-vessel design problem（图）+ §4.4"
+    },
+    {
+      "q_id": "s10_fig_en",
+      "type": "figure",
+      "lang": "en",
+      "question": "What does the overview of the two-stage paradigm in the LLM overconfidence paper depict?",
+      "gold_hint": "d059e8540d5d Fig. 1 | Overview of the two-stage paradigm（图）+ Results 首节"
+    },
+    {
+      "q_id": "s11_fig_zh",
+      "type": "figure",
+      "lang": "zh",
+      "question": "KAN 与 MLP 的基本单元有什么区别？",
+      "gold_hint": "f9807c0c485e Fig. 1 Comparison of MLP and KAN + Fig. 2 Infrastructure of the KAN model + Preliminaries/Kolmogorov-Arnold network"
+    },
+    {
+      "q_id": "s12_table_zh",
+      "type": "table",
+      "lang": "zh",
+      "question": "压力容器设计问题的实验结果中，哪个算法得到的最优成本最低？",
+      "gold_hint": "3627b932f186 §4.4 Pressure-vessel design problem 结果表（WDE 对比实验表格）"
+    },
+    {
+      "q_id": "s13_table_en",
+      "type": "table",
+      "lang": "en",
+      "question": "Which preselection strategy achieves the best performance in the comparison study?",
+      "gold_hint": "4f23718fa52e III. COMPARISON STUDY OF PRESELECTION STRATEGIES 结果表（RCPS 相关表格）"
+    },
+    {
+      "q_id": "s14_table_zh",
+      "type": "table",
+      "lang": "zh",
+      "question": "bQDEHHO 在 CEC2017 上的参数敏感性实验是怎么设置的？",
+      "gold_hint": "5bec341c3134 §3/§4 + Fig. 4 QDEHHO parametric sensitivity on CEC2017 + 相关参数表"
+    },
+    {
+      "q_id": "s15_table_en",
+      "type": "table",
+      "lang": "en",
+      "question": "How many publications were found for decision tree research in the survey's literature search?",
+      "gold_hint": "7335e03ac56b Fig. 2 Number of publications...（检索统计图）+ Inclusion criteria 节；若证据在图，判定时按图表题口径"
+    },
+    {
+      "q_id": "s16_table_zh",
+      "type": "table",
+      "lang": "zh",
+      "question": "描述性统计方法一览表里对位置和尺度的度量包含哪些？",
+      "gold_hint": "69b72d2b0341 Table 3 Methods for descriptive statistics: Measures for location and scale（表格）"
+    },
+    {
+      "q_id": "s17_unans_zh",
+      "type": "unanswerable",
+      "lang": "zh",
+      "question": "2026 年最新的图像分割阈值方法是哪一种？",
+      "gold_hint": "语料为 2024-2026 前的历史论文集合，且无'2026 最新'类比较——应拒绝"
+    },
+    {
+      "q_id": "s18_unans_en",
+      "type": "unanswerable",
+      "lang": "en",
+      "question": "Who won the Turing Award in 2025?",
+      "gold_hint": "语料无关——应拒绝"
+    },
+    {
+      "q_id": "s19_unans_zh",
+      "type": "unanswerable",
+      "lang": "zh",
+      "question": "怎样用 Python 实现一个红黑树？请给出完整代码。",
+      "gold_hint": "语料是算法应用论文，无红黑树实现代码——应拒绝"
+    },
+    {
+      "q_id": "s20_unans_en",
+      "type": "unanswerable",
+      "lang": "en",
+      "question": "What is the price of the commercial license for the Bayesian Assistant software?",
+      "gold_hint": "6ebe216067e3 是研究论文，无商业化定价信息——应拒绝"
+    }
+  ]
+}
