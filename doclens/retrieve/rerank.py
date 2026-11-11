@@ -39,6 +39,9 @@ from doclens.index.db import connect
 
 RETRY_BACKOFF_S = 1.0  # R8：重试 1 次、短退避 1s——检索在等它，长退避拖爆延迟预算
 CONTENT_WORDS = 300    # R8：每候选正文截 300 词（RankGPT max_length=300 官方先例，按空白切词计）
+# J-1 定案（M3 集成实测，审查 Major-1）：真实 30 候选（~1160 字符/篇）max_tokens=256 时，
+# 强制思考模型列表式重排成功需 ~60s；timeout=5s 必然降级（重排对最终上下文零影响）。
+# 默认 timeout 提到 30s（部分长思考仍可能降级，降级率入 M5 消融观测）；快路径 = A-C 档 RRF 直出。
 
 # R8 可重试异常：超时/网络/限流（APITimeoutError 是 APIConnectionError 子类）。
 # 其余（鉴权/参数错等）重试无意义，首次即降级。
@@ -266,7 +269,7 @@ async def rerank_candidates(
     candidates: list[Candidate],
     *,
     model_tier: str = "flash",
-    timeout: float = 5.0,
+    timeout: float = 30.0,
     max_tokens: int = 256,
     use_cache: bool = True,
 ) -> RerankOutcome:
