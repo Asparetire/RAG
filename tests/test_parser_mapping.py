@@ -44,7 +44,8 @@ def test_only_canonical_types(doc: DoclensDoc):
 
 
 def test_table_mapping_synthetic():
-    """MinerU 输出 table 类型（部分文档会有）→ HTML 转 Markdown，不得静默丢弃。"""
+    """MinerU 输出 table 类型（部分文档会有）→ 表格 v2 管线：卡片前缀 + 清洗后 markdown，
+    不得静默丢弃。（M2 K2 变更：v1 纯线性化升级为结构理解管线，content 首行为卡片）"""
     structured = {
         "pages": [
             {
@@ -59,13 +60,19 @@ def test_table_mapping_synthetic():
             }
         ]
     }
-    doc = build_doc("b" * 64, structured, {})
+    collect = []
+    doc = build_doc("b" * 64, structured, {}, collect=collect)
     assert len(doc.blocks) == 1
     b = doc.blocks[0]
     assert b.type == "table" and b.page == 1
-    assert b.content.splitlines()[0] == "| Algo | Best |"
-    assert b.content.splitlines()[1] == "|---|---|"
+    # v2：首行是表格卡片（无 caption → 无【表注】段），随后空行 + 清洗后 markdown
+    assert b.content.splitlines()[0] == "【列】Algo / Best"
+    assert "| Algo | Best |" in b.content
     assert "| REL | 0.98 |" in b.content
+    # manifest 收集：1 张表、source=html、columns 齐
+    assert len(collect) == 1
+    assert collect[0]["source"] == "html" and collect[0]["columns"] == ["Algo", "Best"]
+    assert collect[0]["n_rows_clean"] == 1
 
 
 def test_caption_binding(doc: DoclensDoc):

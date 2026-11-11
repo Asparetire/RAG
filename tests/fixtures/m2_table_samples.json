@@ -1,0 +1,149 @@
+[
+ {
+  "doc_id": "13c8e91b3467",
+  "kind": "html_raw",
+  "raw": {
+   "type": "table",
+   "bbox": [
+    0.183,
+    0.076,
+    0.844,
+    0.928
+   ],
+   "content": "<table><tr><td rowspan=\"2\">Test images</td><td rowspan=\"2\">m</td><td colspan=\"4\">Best objective function values</td><td colspan=\"4\">Optimum threshold values</td></tr><tr><td>BFHS</td><td>BF</td><td>HS</td><td>GA</td><td>BFHS</td><td>BF</td><td>HS</td><td>GA</td></tr><tr><td rowspan=\"4\">1 (750 × 750)</td><td>2</td><td>0.898988</td><td>0.898986</td><td>0.898972</td><td>0.898912</td><td>62, 180</td><td>65, 183</td><td>115, 136</td><td>31, 177</td></tr><tr><td>3</td><td>1.296296</td><td>1.296286</td><td>1.296282</td><td>1.296280</td><td>92, 105, 238</td><td>95, 108, 204</td><td>138, 193, 250</td><td>99, 104, 212</td></tr><tr><td>4</td><td>1.654392</td><td>1.654390</td><td>1.654382</td><td>1.654320</td><td>35, 121, 170, 199</td><td>18, 118, 168, 189</td><td>14, 116, 134, 163</td><td>55, 107, 168, 231</td></tr><tr><td>5</td><td>1.999993</td><td>1.999991</td><td>1.999984</td><td>1.999900</td><td>83, 103, 169, 236, 256</td><td>68, 156, 157, 225, 255</td><td>33, 76, 110, 111, 189</td><td>69, 74, 107, 132, 197</td></tr><tr><td rowspan=\"4\">2 (512 × 512)</td><td>2</td><td>0.899171</td><td>0.898077</td><td>0.897812</td><td>0.892253</td><td>68, 204</td><td>66, 199</td><td>77, 212</td><td>66, 99</td></tr><tr><td>3</td><td>1.299174</td><td>1.297668</td><td>1.295387</td><td>1.287382</td><td>52, 138, 212</td><td>67, 130, 198</td><td>146, 175, 240</td><td>12, 113, 179,</td></tr><tr><td>4</td><td>1.659995</td><td>1.659987</td><td>1.655493</td><td>1.656630</td><td>46, 104, 161, 203</td><td>30, 105, 162, 189</td><td>75, 115, 164, 199</td><td>51, 78, 150, 179</td></tr><tr><td>5</td><td>1.999997</td><td>1.999955</td><td>1.999982</td><td>1.999985</td><td>56, 89, 153, 195, 226</td><td>36, 90, 139, 186, 219</td><td>12, 24, 96, 138, 140</td><td>69, 74, 107, 132, 197</td></tr><tr><td rowspan=\"4\">3 (616 × 616)</td><td>2</td><td>0.888930</td><td>0.888239</td><td>0.885786</td><td>0.882399</td><td>61, 159</td><td>70, 130</td><td>14, 137</td><td>80, 108</td></tr><tr><td>3</td><td>1.296299</td><td>1.296290</td><td>1.296192</td><td>1.294283</td><td>69, 180, 201</td><td>78, 177, 215</td><td>8, 167, 255</td><td>89, 185, 216</td></tr><tr><td>4</td><td>1.659990</td><td>1.659991</td><td>1.654419</td><td>1.654222</td><td>56, 66, 109, 197</td><td>50, 63, 111, 204</td><td>18, 135, 189, 204</td><td>52, 65, 94, 178</td></tr><tr><td>5</td><td>1.999991</td><td>1.999990</td><td>1.999979</td><td>1.999919</td><td>65, 66, 127, 145, 184</td><td>70, 129, 192, 241, 255</td><td>6, 36, 99, 146, 186</td><td>08, 35, 154, 227, 240</td></tr><tr><td rowspan=\"4\">4 (512 × 512)</td><td>2</td><td>0.888892</td><td>0.888862</td><td>0.888465</td><td>0.888206</td><td>66, 178</td><td>62, 178</td><td>49, 174</td><td>74, 125</td></tr><tr><td>3</td><td>1.299488</td><td>1.299077</td><td>1.297182</td><td>1.297481</td><td>48, 138, 202</td><td>52, 142, 199</td><td>62, 122, 197</td><td>34, 202, 226</td></tr><tr><td>4</td><td>1.659922</td><td>1.650984</td><td>1.655421</td><td>1.655544</td><td>75, 144, 180, 211</td><td>72, 140, 162, 199</td><td>136, 146, 161, 222</td><td>161, 164, 183, 186</td></tr><tr><td>5</td><td>1.999995</td><td>1.999994</td><td>1.999994</td><td>1.998369</td><td>13, 64, 139, 160, 182</td><td>108, 171, 229, 254, 255</td><td>13, 22, 86, 170, 208</td><td>26, 117, 188, 223, 231</td></tr><tr><td rowspan=\"4\">5 (900 × 900)</td><td>2</td><td>0.888889</td><td>0.888886</td><td>0.888889</td><td>0.888806</td><td>69, 178</td><td>69, 178</td><td>129, 226</td><td>69, 176</td></tr><tr><td>3</td><td>1.299346</td><td>1.999922</td><td>1.296335</td><td>1.292477</td><td>52, 82, 199</td><td>52, 80, 190</td><td>7, 55, 166</td><td>51, 100, 225</td></tr><tr><td>4</td><td>1.659233</td><td>1.659055</td><td>1.656620</td><td>1.659716</td><td>64, 99, 104, 189</td><td>62, 92, 105, 195</td><td>63, 92, 98, 175</td><td>114, 196, 221, 246</td></tr><tr><td>5</td><td>1.999999</td><td>1.999996</td><td>1.999996</td><td>1.999897</td><td>10, 33, 121, 196, 287</td><td>96, 151, 221, 222, 255</td><td>60, 60, 98, 157, 199</td><td>59, 80, 87, 146, 231</td></tr></table>",
+   "captions": [
+    {
+     "bbox": [
+      0.157,
+      0.124,
+      0.187,
+      0.927
+     ],
+     "content": "Table4ComparisonofbestobjectivefunctionvaluesandtheircorrespondingthresholdvaluesbetweenBFHS,BF,HS,andGA-basedtechniqueusingKapur’sentropy"
+    }
+   ],
+   "footnotes": [],
+   "image_source": "images/page_20_table_3.jpg"
+  }
+ },
+ {
+  "doc_id": "13c8e91b3467",
+  "kind": "continued_block",
+  "block": {
+   "type": "table",
+   "page": 13,
+   "content": "| 35: | $\\mathbf{x}_{new}(j) = l(j)$ |\n| --- | --- |\n|  | // l is the lower bound |\n| 36: | If $\\mathbf{x}_{new}(j) > u(j)$ |\n| 37: | $\\mathbf{x}_{new}(j) = u(j)$ |\n|  | // u is the upper bound |\n| 38: | else |\n| 39: | $\\mathbf{x}_{new}(j) = l(j) \\pm r \\times (u(j) - l(j))$ |\n|  | // $r \\in \\text{rand}(0, 1)$ |\n| 40: | End Loop |\n| 41: | Update the HS as $\\mathbf{x}_{worst} = \\mathbf{x}_{new}$ if $f(\\mathbf{x}_{new}) > f(\\mathbf{x}_{worst})$ |\n| 42: | If NI is completed or the stop criterion is met, jump to 43; else go to 28. |\n| 43: | $A(n) = \\mathbf{x}_{best}$ |\n| 44: | Update probability vector p of LA using learning rule. |\n| 45: | Obtain the minimum, $J_{min}$, and median, $J_{med}$ of $J(n)$. |\n| 46: | Evaluate $\\beta(n)$ via Eq. (15). |\n| 47: | Until n &lt; 2000 |",
+   "bbox": [
+    0.11,
+    0.099,
+    0.884,
+    0.364
+   ],
+   "caption": "(Continued)",
+   "image_path": null,
+   "heading_path": [
+    "A hybrid bio-inspired learning algorithm for image segmentation using multilevel thresholding",
+    "Table 2 Pseudo-code of the hybrid method"
+   ],
+   "order": 92
+  }
+ },
+ {
+  "doc_id": "3627b932f186",
+  "kind": "html_raw",
+  "raw": {
+   "type": "table",
+   "bbox": [
+    0.166,
+    0.063,
+    0.837,
+    0.907
+   ],
+   "content": "<table><tr><td rowspan=\"2\">F</td><td colspan=\"3\">CS</td><td colspan=\"3\">ABC</td><td colspan=\"3\">JADE</td><td colspan=\"3\">BSA</td><td colspan=\"3\">WDE</td></tr><tr><td>Ave</td><td>Std</td><td>t (s)</td><td>Ave</td><td>Std</td><td>t (s)</td><td>Ave</td><td>Std</td><td>t (s)</td><td>Ave</td><td>Std</td><td>t (s)</td><td>Ave</td><td>Std</td><td>t (s)</td></tr><tr><td>F1</td><td>-1400.000</td><td>8.81e-14</td><td>3.16</td><td>-1400.000</td><td>0.00</td><td>4.99</td><td>-1400.000</td><td>2.27e-13</td><td>8.75</td><td>-1400.000</td><td>8.81e-14</td><td>2.26</td><td>-1400.000</td><td>0.00</td><td>10.67</td></tr><tr><td>F2</td><td>9.38e+05</td><td>4.71e+05</td><td>51.97</td><td>2.56e+06</td><td>7.87e+05</td><td>36.68</td><td>2.18e+05</td><td>1.38e+05</td><td>413.83</td><td>6.84e+03</td><td>5.51e+03</td><td>54.30</td><td>-1300.000</td><td>1.44e-13</td><td>65.86</td></tr><tr><td>F3</td><td>1.36e+08</td><td>2.55e+08</td><td>53.21</td><td>1.14e+07</td><td>8.56e+06</td><td>35.42</td><td>1.42e+08</td><td>1.80e+08</td><td>408.01</td><td>2.11e+04</td><td>7.09e+04</td><td>53.81</td><td>1.13e+05</td><td>1.14e+05</td><td>108.10</td></tr><tr><td>F4</td><td>219.507</td><td>1.47e+03</td><td>48.45</td><td>38,231.404</td><td>4.22e+03</td><td>30.67</td><td>-1073.517</td><td>4.59e+01</td><td>649.37</td><td>-1100.000</td><td>1.100e-06</td><td>51.98</td><td>-1100.000</td><td>1.24e-13</td><td>68.67</td></tr><tr><td>F5</td><td>-1000.000</td><td>9.51e-14</td><td>6.32</td><td>-1000.000</td><td>1.19e-13</td><td>17.03</td><td>-1000.000</td><td>1.22e-13</td><td>59.80</td><td>-1000.000</td><td>1.14e-13</td><td>1.83</td><td>-1000.000</td><td>0.00</td><td>17.46</td></tr><tr><td>F6</td><td>-896.408</td><td>3.41</td><td>43.06</td><td>-899.916</td><td>1.03e-01</td><td>25.88</td><td>-887.471</td><td>2.09e+01</td><td>573.27</td><td>-900.000</td><td>1.08e-13</td><td>13.47</td><td>-900.000</td><td>0.00</td><td>51.42</td></tr><tr><td>F7</td><td>-728.928</td><td>1.18e+01</td><td>37.96</td><td>-750.511</td><td>1.16e+01</td><td>32.56</td><td>-756.180</td><td>1.92e+01</td><td>548.48</td><td>-786.287</td><td>7.36</td><td>62.24</td><td>-783.078</td><td>5.03</td><td>120.76</td></tr><tr><td>F8</td><td>-679.283</td><td>4.39e-02</td><td>5.57</td><td>-679.273</td><td>5.19e-02</td><td>25.54</td><td>-679.305</td><td>7.19e-02</td><td>24.01</td><td>-679.287</td><td>9.17e-02</td><td>4.67</td><td>-679.313</td><td>7.82e-02</td><td>16.14</td></tr><tr><td>F9</td><td>-583.951</td><td>1.57</td><td>68.73</td><td>-584.044</td><td>1.20</td><td>30.17</td><td>-587.429</td><td>2.24</td><td>212.90</td><td>-587.909</td><td>2.04</td><td>131.55</td><td>-585.635</td><td>1.08</td><td>174.67</td></tr><tr><td>F10</td><td>-499.995</td><td>5.73e-03</td><td>49.98</td><td>-499.791</td><td>6.98e-02</td><td>49.21</td><td>-497.559</td><td>2.04</td><td>35.04</td><td>-499.948</td><td>5.57e-02</td><td>14.25</td><td>-500.000</td><td>2.46e-09</td><td>108.93</td></tr><tr><td>F11</td><td>-399.851</td><td>3.55e-01</td><td>15.50</td><td>-400.000</td><td>4.58e-14</td><td>10.08</td><td>-394.180</td><td>6.01</td><td>18.58</td><td>-400.000</td><td>1.80e-14</td><td>3.71</td><td>-400.000</td><td>3.22e-11</td><td>112.48</td></tr><tr><td>F12</td><td>-231.668</td><td>2.47e+01</td><td>60.74</td><td>-211.882</td><td>1.98e+01</td><td>33.90</td><td>-240.141</td><td>1.62e+01</td><td>233.69</td><td>-268.261</td><td>6.68</td><td>16.17</td><td>-283.416</td><td>3.37</td><td>116.99</td></tr><tr><td>F13</td><td>-126.694</td><td>1.36e+01</td><td>50.75</td><td>-80.966</td><td>1.47e+01</td><td>31.34</td><td>-113.184</td><td>2.35e+01</td><td>189.50</td><td>-135.234</td><td>1.16e+01</td><td>18.09</td><td>-170.488</td><td>9.32</td><td>115.97</td></tr><tr><td>F14</td><td>-56.783</td><td>4.90e+01</td><td>53.47</td><td>-99.887</td><td>4.11e-02</td><td>41.71</td><td>163.811</td><td>1.36e+02</td><td>44.51</td><td>-96.799</td><td>8.21</td><td>22.57</td><td>-99.463</td><td>5.60e-01</td><td>112.44</td></tr><tr><td>F15</td><td>2241.617</td><td>3.71e+02</td><td>37.39</td><td>1798.467</td><td>2.26e+02</td><td>29.79</td><td>2145.751</td><td>3.74e+02</td><td>199.12</td><td>1869.153</td><td>2.67e+02</td><td>44.67</td><td>1705.872</td><td>2.27e+02</td><td>114.41</td></tr><tr><td>F16</td><td>200.937</td><td>1.58e-01</td><td>15.55</td><td>200.798</td><td>9.43e-02</td><td>33.58</td><td>201.145</td><td>3.09e-01</td><td>114.86</td><td>200.587</td><td>1.13e-01</td><td>39.30</td><td>200.368</td><td>7.89e-02</td><td>138.06</td></tr><tr><td>F17</td><td>320.589</td><td>1.82</td><td>52.59</td><td>320.342</td><td>2.06e-03</td><td>41.09</td><td>320.436</td><td>1.16e-01</td><td>55.44</td><td>318.331</td><td>6.03</td><td>20.13</td><td>310.350</td><td>1.00e+01</td><td>108.94</td></tr><tr><td>F18</td><td>475.076</td><td>1.28e+01</td><td>41.07</td><td>526.096</td><td>1.43e+01</td><td>30.32</td><td>492.532</td><td>1.89e+01</td><td>179.49</td><td>444.290</td><td>6.49</td><td>59.99</td><td>431.403</td><td>2.45</td><td>111.91</td></tr><tr><td>F19</td><td>501.719</td><td>1.98e-01</td><td>46.49</td><td>500.076</td><td>3.49e-02</td><td>40.30</td><td>509.711</td><td>5.48</td><td>221.27</td><td>500.287</td><td>1.28e-01</td><td>50.64</td><td>500.450</td><td>9.12e-02</td><td>107.32</td></tr><tr><td>F20</td><td>607.551</td><td>6.84e-01</td><td>23.69</td><td>609.447</td><td>3.24e-01</td><td>25.07</td><td>607.080</td><td>1.52</td><td>103.74</td><td>606.164</td><td>8.00e-01</td><td>55.34</td><td>606.628</td><td>5.82e-01</td><td>114.02</td></tr><tr><td>F21</td><td>895.832</td><td>6.70e+01</td><td>49.59</td><td>819.902</td><td>2.11e+01</td><td>27.94</td><td>1040.000</td><td>8.00e+01</td><td>19.53</td><td>1040.000</td><td>9.17e+01</td><td>5.84</td><td>855.007</td><td>5.89e+01</td><td>130.57</td></tr><tr><td>F22</td><td>1137.105</td><td>2.41e+02</td><td>85.81</td><td>808.500</td><td>5.85</td><td>57.17</td><td>1046.627</td><td>1.21e+02</td><td>144.97</td><td>800.000</td><td>1.08e-13</td><td>54.01</td><td>816.969</td><td>3.99</td><td>142.86</td></tr><tr><td>F23</td><td>3780.819</td><td>3.61e+02</td><td>64.72</td><td>3499.165</td><td>3.10e+02</td><td>33.36</td><td>3453.046</td><td>4.08e+02</td><td>160.52</td><td>3144.507</td><td>2.23e+02</td><td>78.81</td><td>2898.065</td><td>3.15e+02</td><td>145.00</td></tr><tr><td>F24</td><td>1245.374</td><td>6.03</td><td>134.78</td><td>1231.720</td><td>1.43e+01</td><td>37.04</td><td>1239.778</td><td>5.65</td><td>292.58</td><td>1236.889</td><td>5.49</td><td>144.50</td><td>1244.293</td><td>4.90</td><td>223.27</td></tr><tr><td>F25</td><td>1353.138</td><td>4.31</td><td>103.14</td><td>1357.813</td><td>4.74</td><td>32.37</td><td>1345.338</td><td>6.14</td><td>290.54</td><td>1344.466</td><td>4.66</td><td>146.44</td><td>1352.629</td><td>4.53</td><td>223.59</td></tr><tr><td>F26</td><td>1400.201</td><td>1.20e-01</td><td>209.75</td><td>1397.840</td><td>6.43</td><td>72.99</td><td>1420.577</td><td>4.89e+01</td><td>300.96</td><td>1400.002</td><td>2.36e-04</td><td>195.24</td><td>1398.931</td><td>4.66</td><td>164.95</td></tr><tr><td>F27</td><td>2056.377</td><td>2.63e+01</td><td>94.06</td><td>1700.000</td><td>7.49e-13</td><td>45.35</td><td>1909.972</td><td>6.30e+01</td><td>299.81</td><td>1938.630</td><td>3.89e+01</td><td>171.58</td><td>1959.547</td><td>1.12e+02</td><td>242.51</td></tr><tr><td>F28</td><td>2696.670</td><td>2.81e+02</td><td>105.38</td><td>2648.656</td><td>6.04e+02</td><td>37.01</td><td>2870.237</td><td>2.72e+02</td><td>236.45</td><td>2078.173</td><td>5.43e+02</td><td>44.16</td><td>1712.140</td><td>3.72e+02</td><td>154.15</td></tr></table>",
+   "captions": [
+    {
+     "bbox": [
+      0.143,
+      0.614,
+      0.164,
+      0.904
+     ],
+     "content": "Table2ResultsthatbelongtotestscarriedoutbyusingF1–F28"
+    }
+   ],
+   "footnotes": [],
+   "image_source": "images/page_6_table_3.jpg"
+  }
+ },
+ {
+  "doc_id": "5db85404be42",
+  "kind": "md_block",
+  "block": {
+   "type": "table",
+   "page": 6,
+   "content": "| Journal | IF 2019 | CiteScore | 2019 Publisher | Journal homepage |\n| --- | --- | --- | --- | --- |\n| Pattern Recognition | 7.196 | 13.1 | Elsevier | https://www.journals.elsevier.com/pattern-​recognition |\n| Pattern Recognition Letter | 3.255 | 6.3 | Elsevier | https://www.journals.elsevier.com/pattern-​recognition-​letters |\n| Artificial Intelligence Review | 5.747 | 9.1 | Springer | https://www.springer.com/journal/1lin0e4.6c2o?mreferer=www.springeron |\n| Expert Systems with Applications | 5.452 | 11 | Elsevier | https://www.sciencedirect.com/journal/expert-​systems-​with-​applications |\n| Neurocomputing | 4.438 | 9.5 | Elsevier | https://www.journals.elsevier.com/neurocomputing |\n| Nature Medicine | 36.130 | 45.9 | Nature | https://www.nature.com/nm/ |\n| Nature | 42.779 | 51 | Nature | https://www.nature.com/ |\n| Journal of Big Data | - | 6.1 | Springer | https://journalofbigdata.springeropen.com/ |\n| Multimedia Tools and Applications | 2.313 | 3.7 | Springer | https://www.springer.com/journal/11042 |\n| Computer Methods and Programs | 3.632 | 7.5 | Elsevier | https://www.journals.elsevier.com/ |\n| in Biomedicine |  |  |  | computer-​methods-​and-​programs-​ in-​biomedicine |\n| Machine Learning | 2.672 | 5.0 | Springer | https://www.springer.com/journal/10994 |\n| Machine Vision and Applications | 1.605 | 4.2 | Springer | https://www.springer.com/journal/138 |\n| Medical Image Analysis | 11.148 | 17.2 | Elsevier | https://www.sciencedirect.com/journal/medical-​image-​analysis |\n| IEEE Access | 3.745 | 3.9 | IEEE | https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=6287639 |\n| IEEE Transactions on Knowledge | 4.935 | 12.0 | IEEE | https://ieeexplore.ieee.org/xpl/Recen |\n| and Data Engineering |  |  |  | tIssue.jsp?punumber=69 |\n| Nature Communications | 12.121 | 18.1 | Nature | https://www.nature.com/ncomms/ |\n| IEEE Transactions on Intelligent | 6.319 | 12.7 | IEEE | https://ieeexplore.ieee.org/xpl/Recen |\n| Transportation Systems |  |  |  | tIssue.jsp?punumber=6979 |\n| Methods | 3.812 | 8.0 | Elsevier | https://www.journals.elsevier.com/methods |\n| ACM Journal on Emerging Tech- | 1.652 | 4.3 | ACM | https://dl.acm.org/journal/jetc |\n| nologies in Computing Systems |  |  |  |  |\n| ACM Computing Surveys | 6.319 | 12.7 | ACM | https://dl.acm.org/journal/csur |\n| Applied Soft Computing | 5.472 | 10.2 | Elsevier | https://www.journals.elsevier.com/applied-​soft-​computing |\n| Electronics | 2.412 | 1.9 | MDPI | https://www.mdpi.com/journal/electronics |\n| Applied Sciences | 2.474 | 2.4 | MDPI | https://www.mdpi.com/journal/applsci |\n| IEEE Transactions on Industrial | 9.112 | 13.9 | IEEE | https://ieeexplore.ieee.org/xpl/Recen |\n| Informatics |  |  |  | tIssue.jsp?punumber=9424 |",
+   "bbox": [
+    0.192,
+    0.127,
+    0.805,
+    0.772
+   ],
+   "caption": "Table 1 Some of the journals have been cited in this review paper",
+   "image_path": null,
+   "heading_path": [
+    "Review of deep learning: concepts, CNN architectures, challenges, applications, future directions",
+    "Background"
+   ],
+   "order": 34
+  }
+ },
+ {
+  "doc_id": "d059e8540d5d",
+  "kind": "html_raw",
+  "raw": {
+   "type": "table",
+   "bbox": [
+    0.028,
+    0.088,
+    0.926,
+    0.408
+   ],
+   "content": "<table><tr><td colspan=\"2\">Policy information about studies withhuman participants or human data.See also policy information aboutsex, gender (identity/presentation), and sexual orientationandrace, ethnicity and racism.</td></tr><tr><td>Reporting on sex and gender</td><td>Use the terms sex (biological attribute) and gender (shaped by social and cultural circumstances) carefully in order to avoid confusing both terms. Indicate if findings apply to only one sex or gender; describe whether sex and gender were considered in study design; whether sex and/or gender was determined based on self-reporting or assigned and methods used.Provide in the source data disaggregated sex and gender data, where this information has been collected, and if consent has been obtained for sharing of individual-level data; provide overall numbers in this Reporting Summary. Please state if this information has not been collected.Report sex- and gender-based analyses where performed, justify reasons for lack of sex- and gender-based analysis.</td></tr><tr><td>Reporting on race, ethnicity, or other socially relevant groupings</td><td>Please specify the socially constructed or socially relevant categorization variable(s) used in your manuscript and explain why they were used. Please note that such variables should not be used as proxies for other socially constructed/relevant variables (for example, race or ethnicity should not be used as a proxy for socioeconomic status).Provide clear definitions of the relevant terms used, how they were provided (by the participants/respondents, the researchers, or third parties), and the method(s) used to classify people into the different categories (e.g. self-report, census or administrative data, social media data, etc.)Please provide details about how you controlled for confounding variables in your analyses.</td></tr><tr><td>Population characteristics</td><td>Describe the covariate-relevant population characteristics of the human research participants (e.g. age, genotypic information, past and current diagnosis and treatment categories). If you filled out the behavioural &amp; social sciences study design questions and have nothing to add here, write &quot;See above.&quot;</td></tr><tr><td>Recruitment</td><td>Describe how participants were recruited. Outline any potential self-selection bias or other biases that may be present and how these are likely to impact results.</td></tr><tr><td>Ethics oversight</td><td>Identify the organization(s) that approved the study protocol.</td></tr></table>",
+   "captions": [],
+   "footnotes": [
+    {
+     "bbox": [
+      0.026,
+      0.41,
+      0.597,
+      0.424
+     ],
+     "content": "Note that full information on the approval of the study protocol must also be provided in the manuscript."
+    }
+   ],
+   "image_source": "images/page_15_table_1.jpg"
+  }
+ },
+ {
+  "doc_id": "d059e8540d5d",
+  "kind": "md_block",
+  "block": {
+   "type": "table",
+   "page": 16,
+   "content": "| Policy information about studies withhuman participants or human data.See also policy information aboutsex, gender (identity/presentation), and sexual orientationandrace, ethnicity and racism. |\n|---|\n| Reporting on sex and gender | Use the terms sex (biological attribute) and gender (shaped by social and cultural circumstances) carefully in order to avoid confusing both terms. Indicate if findings apply to only one sex or gender; describe whether sex and gender were considered in study design; whether sex and/or gender was determined based on self-reporting or assigned and methods used.Provide in the source data disaggregated sex and gender data, where this information has been collected, and if consent has been obtained for sharing of individual-level data; provide overall numbers in this Reporting Summary. Please state if this information has not been collected.Report sex- and gender-based analyses where performed, justify reasons for lack of sex- and gender-based analysis. |\n| Reporting on race, ethnicity, or other socially relevant groupings | Please specify the socially constructed or socially relevant categorization variable(s) used in your manuscript and explain why they were used. Please note that such variables should not be used as proxies for other socially constructed/relevant variables (for example, race or ethnicity should not be used as a proxy for socioeconomic status).Provide clear definitions of the relevant terms used, how they were provided (by the participants/respondents, the researchers, or third parties), and the method(s) used to classify people into the different categories (e.g. self-report, census or administrative data, social media data, etc.)Please provide details about how you controlled for confounding variables in your analyses. |\n| Population characteristics | Describe the covariate-relevant population characteristics of the human research participants (e.g. age, genotypic information, past and current diagnosis and treatment categories). If you filled out the behavioural &amp; social sciences study design questions and have nothing to add here, write &quot;See above.&quot; |\n| Recruitment | Describe how participants were recruited. Outline any potential self-selection bias or other biases that may be present and how these are likely to impact results. |\n| Ethics oversight | Identify the organization(s) that approved the study protocol. |",
+   "bbox": [
+    0.028,
+    0.088,
+    0.926,
+    0.408
+   ],
+   "caption": null,
+   "image_path": null,
+   "heading_path": [
+    "Reporting Summary",
+    "Research involving human participants, their data, or biological material"
+   ],
+   "order": 276
+  }
+ }
+]

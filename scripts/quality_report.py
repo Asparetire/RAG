@@ -16,6 +16,7 @@ import json
 import re
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 # 支持 `python scripts/quality_report.py` 直接执行
@@ -145,7 +146,65 @@ def main(argv: list[str] | None = None) -> int:
         f"[完成] {len(rows)} 篇质检完毕：有编号图表单元覆盖 "
         f"{f'{unit_cov:.1%}' if unit_cov is not None else '—'}（主指标）、逐块绑定 {f'{overall:.1%}' if overall is not None else '—'}（参考）→ {args.out}"
     )
+    _table_audit(args.parsed)
     return 0
+
+
+def _table_audit(parsed_dir: Path) -> None:
+    """表格 v2 审计（m2-runbook 2.0）：读各篇 tables_manifest.json，产出全量人工过目报告。"""
+    out = REPORTS_DIR / "table_audit_m2.md"
+    lines = [
+        "# M2 表格结构理解审计报告（125 表全量人工过目）",
+        "",
+        f"> 生成时间：{time.strftime('%Y-%m-%d %H:%M:%S')} ｜ 依据：m2-runbook 2.0 验收"
+        "（列名/行名正确、无效内容零混入、排除零误伤数据行）",
+        "> 审计方法：逐表核对【列】【行】与排除清单；注意 MinerU 侧 caption 可能存在空格丢失（解析器特性，非管线缺陷）",
+        "",
+    ]
+    total = 0
+    src_counter: Counter = Counter()
+    exc_counter: Counter = Counter()
+    flag_rows: list[str] = []
+    for d in sorted(parsed_dir.iterdir()):
+        mf = d / "tables_manifest.json"
+        if not mf.exists():
+            continue
+        manifests = json.loads(mf.read_text(encoding="utf-8"))
+        if manifests:
+            lines += [f"## {d.name}", "", "| table_id | 页 | 来源 | 列名 | 行名列 | 行数(清洗/原始) | 排除项 |", "|---|---|---|---|---|---|---|"]
+        for m in manifests:
+            total += 1
+            src_counter[m["source"]] += 1
+            exc = "；".join(f"{e['type']}({e['where']})" for e in m["excluded"]) or "—"
+            for e in m["excluded"]:
+                exc_counter[e["type"]] += 1
+            cols = " / ".join(m["columns"][:6]) + (" …" if len(m["columns"]) > 6 else "")
+            if len(cols) > 80:
+                cols = cols[:78] + "…"
+            labels = " / ".join(m["row_labels"][:4]) + (" …" if len(m["row_labels"]) > 4 else "")
+            if len(labels) > 60:
+                labels = labels[:58] + "…"
+            row = (
+                f"| {m['table_id']} | {m['page']} | {m['source']} | {cols or '—'} "
+                f"| {labels or '—'} | {m['n_rows_clean']}/{m['n_rows_raw']} | {exc} |"
+            )
+            lines.append(row)
+            # 粗筛红旗：无表头且无行名的"零结构"表，供人工重点看
+            if not m["columns"] and not m["row_labels"] and m["source"] == "html":
+                flag_rows.append(f"- `{m['table_id']}`：HTML 源但未判出任何列名/行名（重点核对是否漏判）")
+        if manifests:
+            lines.append("")
+    lines += [
+        "## 汇总",
+        "",
+        f"- 表格总数：{total}；来源分布：{dict(src_counter)}；排除项分布：{dict(exc_counter) or '—'}",
+        "",
+        "## 需重点人工核对（自动粗筛）",
+        "",
+        *(flag_rows or ["- （无自动红旗；仍需逐表过目确认）"]),
+    ]
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"[完成] 表格审计报告：{total} 张表（来源 {dict(src_counter)}）→ {out}")
 
 
 if __name__ == "__main__":

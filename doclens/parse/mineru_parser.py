@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from doclens.config import PARSED_DIR, settings
+from doclens.parse import table_struct
 from doclens.parse.schema import Block, DoclensDoc
 
 _TO_TEXT = frozenset({"text", "ref_text", "equation"})
@@ -169,7 +170,12 @@ def _fallback_caption(raw: dict, page_blocks: list[dict], self_idx: int) -> str 
     return best[1][:500] if best else None
 
 
-def build_doc(sha256: str, structured: dict, middle: dict) -> DoclensDoc:
+def build_doc(sha256: str, structured: dict, middle: dict, collect: list | None = None) -> DoclensDoc:
+    """structured+middle → DoclensDoc。
+
+    collect（可选）：传入 list 时，每个表格块的 manifest 会被追加进该列表
+    （M2 表格 v2：调用方落盘 tables_manifest.json 用）；不传则行为与 M1 完全一致。
+    """
     """两个 JSON → 统一文档模型。纯函数，单测直接喂夹具。
 
     图注绑定两阶段：
@@ -226,16 +232,24 @@ def build_doc(sha256: str, structured: dict, middle: dict) -> DoclensDoc:
                 order += 1
 
             elif rtype in _TO_TABLE:
-                text = _table_to_markdown(_plain_text(raw.get("content"))).strip()
+                caption = _bound_caption(raw)
+                # 表格 v2（K2）：结构理解管线——网格化+span 补全、无效区域剔除、列名/行名判定，
+                # 输出"表格卡片+清洗后 markdown"，manifest 收集到 collect 供 tables_manifest.json 落盘
+                text, table_manifest = table_struct.transform_table(
+                    raw, caption=caption, page=page_no, order=order, doc_id=sha256[:12]
+                )
                 if not text:
                     continue
+                if collect is not None:
+                    table_manifest["caption"] = caption  # 绑定后的图注回填清单
+                    collect.append(table_manifest)
                 blocks.append(
                     Block(
                         type="table",
                         page=page_no,
                         content=text,
                         bbox=bbox,
-                        caption=_bound_caption(raw),
+                        caption=caption,
                         heading_path=[s for _, s in heading_stack],
                         order=order,
                     )
@@ -316,8 +330,11 @@ def _run_mineru(pdf_path: Path, workdir: Path) -> None:
     ) from last_err
 
 
-def parse_pdf(pdf_path: Path, *, force: bool = False) -> DoclensDoc:
-    """解析单篇 PDF → DoclensDoc；sha256 缓存命中直接返回（FR-1.1 增量）。"""
+def parse_pdf(pdf_path: Path, *, force: bool = False, collect: list | None = None) -> DoclensDoc:
+    """解析单篇 PDF → DoclensDoc；sha256 缓存命中直接返回（FR-1.1 增量）。
+
+    collect（可选）：表格 manifest 收集列表（M2 表格 v2），新鲜解析路径同步回填。
+    """
     pdf_path = Path(pdf_path)
     digest = sha256_of(pdf_path)
     out_dir = PARSED_DIR / digest[:12]
@@ -336,8 +353,13 @@ def parse_pdf(pdf_path: Path, *, force: bool = False) -> DoclensDoc:
             zf.extractall(out_dir)  # structured_content/middle_json/markdown/images 落到 doc 目录
         structured = json.loads((out_dir / "structured_content.json").read_text(encoding="utf-8"))
         middle = json.loads((out_dir / "middle_json.json").read_text(encoding="utf-8"))
-        doc = build_doc(digest, structured, middle)
+        doc = build_doc(digest, structured, middle, collect=collect)
         doc.save(doc_json)
+        if collect is not None:
+            manifest_path = out_dir / "tables_manifest.json"
+            manifest_path.write_text(
+                json.dumps(collect, ensure_ascii=False, indent=1), encoding="utf-8"
+            )
         return doc
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
