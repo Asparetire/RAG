@@ -139,7 +139,7 @@ def _grid_from_markdown(md: str) -> list[list[str]]:
 # ---- ② 无效区域标记 ----
 
 _FOOTNOTE_RE = re.compile(
-    r"^\s*(\*{1,3}|†|‡|note[s]?\b|注\s*[:：]|来源|data source|[a-e]\)\s)",
+    r"^\s*(\*{1,3}|†|‡|note[s]?\b|注\s*[:：]|来源|data source|bold values?\b|[a-e]\)\s)",
     re.IGNORECASE,
 )
 _TOTAL_RE = re.compile(
