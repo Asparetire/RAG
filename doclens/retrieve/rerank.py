@@ -243,8 +243,9 @@ def _chat_once(prompt: str, model: str, *, timeout: float, max_tokens: int):
             model=model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0,           # R10：不保证确定，结果靠缓存固定
-            max_tokens=max_tokens,   # 512 起步（RankGPT 64@5 候选、30 候选放宽；R9 思考 token
-                                     # 另占额度，max_tokens 从紧——实测调参位）
+            max_tokens=max_tokens,   # 3 候选实测：512→4.7s / 128→2.8s（思考消耗 ~430 token，排序
+                                     # 质量相同）——M3 集成调优后默认收紧到 256（30 候选输出 ~120
+                                     # token+缓冲），M5 可再调；R9 思考 token 另占额度
             timeout=timeout,         # R8：默认 5s（检索在等）
         )
     finally:
@@ -266,7 +267,7 @@ async def rerank_candidates(
     *,
     model_tier: str = "flash",
     timeout: float = 5.0,
-    max_tokens: int = 512,
+    max_tokens: int = 256,
     use_cache: bool = True,
 ) -> RerankOutcome:
     """重排融合池候选（m3-runbook 3.2 / K2）。
