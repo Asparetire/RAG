@@ -59,7 +59,8 @@
       "type": "figure",
       "lang": "en",
       "question": "What are the various stages of Harris hawks optimization shown in the paper?",
-      "gold_hint": "5bec341c3134 Fig. 2 The various stages of HHO（图）+ §2.2 Harris hawks optimization"
+      "gold_hint": "5bec341c3134 Fig. 2 The various stages of HHO（图）+ §2.2 Harris hawks optimization",
+      "pair_of": "s07_fig_zh"
     },
     {
       "q_id": "s09_fig_zh",
@@ -95,7 +96,8 @@
       "type": "table",
       "lang": "en",
       "question": "Which preselection strategy achieves the best performance in the comparison study?",
-      "gold_hint": "4f23718fa52e III. COMPARISON STUDY OF PRESELECTION STRATEGIES 结果表（RCPS 相关表格）"
+      "gold_hint": "4f23718fa52e III. COMPARISON STUDY OF PRESELECTION STRATEGIES 结果表（RCPS 相关表格）",
+      "pair_of": "s12_table_zh"
     },
     {
       "q_id": "s14_table_zh",
