@@ -270,17 +270,24 @@ def _run_smoke(profile_name: str, rerank_pro: bool) -> int:
     ]
     n_pass_unans = 0
     n_unans = 0
-    for i, q in enumerate(queries, 1):
-        res = asyncio.run(answer_question(q["question"], profile_name, rerank_pro=rerank_pro))
-        refused = "是" if res["refused"] else "否"
-        if q["type"] == "unanswerable":
-            n_unans += 1
-            n_pass_unans += 1 if res["refused"] else 0
-        ans = res["answer"].replace("|", "\\|").replace("\n", " ")[:300]
-        cites = ", ".join(f"[{n}]" for n in res["cited"]) or "-"
-        lines.append(f"| {i} | {q['q_id']} | {q['type']} | {q['lang']} "
-                     f"| {q['question'].replace('|', '\\|')} | {ans} | {cites} | {refused} "
-                     f"| {res['query_id']} | |")
+    loop = asyncio.new_event_loop()  # 整个跑批共用一个事件循环（asyncio.run 循环复用会
+    asyncio.set_event_loop(loop)     # 触发跨循环资源（Qdrant 连接/信号量）"Event loop is closed"）
+    try:
+        for i, q in enumerate(queries, 1):
+            res = loop.run_until_complete(
+                answer_question(q["question"], profile_name, rerank_pro=rerank_pro))
+            refused = "是" if res["refused"] else "否"
+            if q["type"] == "unanswerable":
+                n_unans += 1
+                n_pass_unans += 1 if res["refused"] else 0
+            ans = res["answer"].replace("|", "\\|").replace("\n", " ")[:300]
+            cites = ", ".join(f"[{n}]" for n in res["cited"]) or "-"
+            lines.append(f"| {i} | {q['q_id']} | {q['type']} | {q['lang']} "
+                         f"| {q['question'].replace('|', '\\|')} | {ans} | {cites} | {refused} "
+                         f"| {res['query_id']} | |")
+    finally:
+        loop.run_until_complete(loop.shutdown_asyncgens())
+        loop.close()
     lines += [
         "",
         f"**不可回答拒绝率（自动统计）**：{n_pass_unans}/{n_unans}",
