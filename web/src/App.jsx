@@ -10,6 +10,7 @@ import ChatPane from './components/ChatPane.jsx'
 import SourceSidebar from './components/SourceSidebar.jsx'
 import PdfPane from './components/PdfPane.jsx'
 import LoginPage from './components/LoginPage.jsx'
+import PaperLibrary from './components/PaperLibrary.jsx'
 
 let _seq = 0
 const nextSeq = () => ++_seq
@@ -142,6 +143,10 @@ export default function App() {
   const [selectedModel, setSelectedModel] = useState(null)
   // 4.9 登录态：有 token 即视为已登录（token 失效由 401 兜底切回）
   const [loggedIn, setLoggedIn] = useState(() => Boolean(getToken()))
+  // 4.8 视图切换：chat | library
+  const [view, setView] = useState('chat')
+  // 论文库打开的论文（复用 PdfPane 预览）
+  const [libraryPaper, setLibraryPaper] = useState(null)
 
   // 持久化：消息变更即写（截最近 60 条；失败静默——隐私模式等场景不阻塞主功能）
   useEffect(() => {
@@ -212,6 +217,12 @@ export default function App() {
       <header className="topbar">
         <div className="brand">DocLens <span className="brand-sub">多模态论文问答</span></div>
         <div className="topbar-actions">
+          <div className="view-switch">
+            <button className={view === 'chat' ? 'active' : ''}
+                    onClick={() => setView('chat')}>对话</button>
+            <button className={view === 'library' ? 'active' : ''}
+                    onClick={() => setView('library')}>论文库</button>
+          </div>
           <button className="btn close" onClick={() => dispatch({ type: 'clear' })}
                   disabled={status === 'streaming'}>清空对话</button>
           <button className="btn close" onClick={() => { clearToken(); setLoggedIn(false) }}>退出登录</button>
@@ -225,25 +236,39 @@ export default function App() {
         </div>
       </header>
       <div className="main">
-        <ChatPane
-          messages={messages}
-          status={status}
-          onAsk={ask}
-          onStop={stop}
-          onCiteClick={(src) => setActiveSource(src)}
-          onMsgDone={onDone}
-          modelsInfo={modelsInfo}
-          selectedModel={selectedModel}
-          onSelectModel={setSelectedModel}
-          onAuthError={handleAuthError}
-        />
-        <SourceSidebar
-          msg={lastAssistant}
-          activeSource={activeSource}
-          onSourceClick={setActiveSource}
-        />
-        {activeSource && (
+        {view === 'library' ? (
+          <PaperLibrary
+            onOpenPaper={(p) => setLibraryPaper(p)}
+            onAuthError={handleAuthError}
+          />
+        ) : (
+          <>
+            <ChatPane
+              messages={messages}
+              status={status}
+              onAsk={ask}
+              onStop={stop}
+              onCiteClick={(src) => setActiveSource(src)}
+              onMsgDone={onDone}
+              modelsInfo={modelsInfo}
+              selectedModel={selectedModel}
+              onSelectModel={setSelectedModel}
+            />
+            <SourceSidebar
+              msg={lastAssistant}
+              activeSource={activeSource}
+              onSourceClick={setActiveSource}
+            />
+          </>
+        )}
+        {view === 'chat' && activeSource && (
           <PdfPane src={activeSource} onClose={() => setActiveSource(null)} />
+        )}
+        {view === 'library' && libraryPaper && (
+          <PdfPane
+            src={{ doc_id: libraryPaper.doc_id, page: 1, bbox: null, title: libraryPaper.title }}
+            onClose={() => setLibraryPaper(null)}
+          />
         )}
       </div>
     </div>
