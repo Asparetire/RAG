@@ -37,7 +37,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sse_starlette.sse import EventSourceResponse
@@ -193,20 +193,16 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         return {"categories": paperlib.list_tree(), "papers": paperlib.list_papers()}
 
     @protected.post("/api/papers/upload")
-    def api_papers_upload(file: Annotated[bytes, File()], category_id: int | None = None):
+    def api_papers_upload(file: Annotated[UploadFile, File()], category_id: int | None = None):
         """multipart 上传：同步校验+落盘+建任务（快返回），解析入库在后台线程。"""
         from doclens import paperlib
-        err = paperlib.validate_upload(file.filename or "", len(file.file.read()))
-        file.file.seek(0)
+        contents = file.file.read()
+        err = paperlib.validate_upload(file.filename or "", len(contents))
         if err:
             raise HTTPException(status_code=422, detail=err)
         # sha256 去重前置检查（文件级，秒回常见重复）
         import hashlib
-        digest = hashlib.sha256()
-        while chunk := file.file.read(1 << 20):
-            digest.update(chunk)
-        file.file.seek(0)
-        doc_id = digest.hexdigest()[:12]
+        doc_id = hashlib.sha256(contents).hexdigest()[:12]
         from doclens.index.db import connect
         conn = connect()
         try:
@@ -221,9 +217,9 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         batch_id = uuid.uuid4().hex
         inbox = DATA_DIR / "pdfs_inbox"
         inbox.mkdir(parents=True, exist_ok=True)
-        dest = inbox / f"{doc_id}_{int(time.time())}_{file.filename}"
-        with dest.open("wb") as f:
-            shutil.copyfileobj(file.file, f)
+        safe_name = (file.filename or "paper.pdf").replace("/", "_").replace("\\", "_")
+        dest = inbox / f"{doc_id}_{int(time.time())}_{safe_name}"
+        dest.write_bytes(contents)
 
         cat_id = category_id or paperlib.ensure_default_category()
         task_id = paperlib.create_task(file.filename, cat_id, batch_id)
