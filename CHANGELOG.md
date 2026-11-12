@@ -153,5 +153,13 @@
 - **测试**：195 passed 双端（+25：契约鉴权/auth 5/资产安全 7/守卫 5/模型 2 等）；新增依赖 pwdlib[argon2]==0.3.1/PyJWT==2.15.1/python-multipart==0.0.33 双端锁版对齐。
 - **待办移交**：①上传全流程终验用真实新论文（合成 PDF 版式超 MinerU 预期输入，已验证失败路径与 B-1 canonical 落盘）；②S3 m-3 非 vision 模型带图过滤/m-4 上传分块落盘/m-7 paperlib 单测池；③paperlib 4.8 冒烟报告入 reports/（沿 M3 惯例）。
 
+## 2026-11-12｜fix：M4 收官后体检——论文库三 bug+缓存事故根因+交互优化（tag m4 随修更新）
+
+- **论文库三 bug**：①点论文渲染出错=登录门回归（pdf.js/iframe 原生请求不带 Authorization→401）——react-pdf 加 httpHeaders，论文库预览改**浏览器原生 iframe 渲染**（用户诉求"直接渲染原文"，零依赖）；②标题不对=5bec341c3134 title 为 NULL（M1 提取被 "ORIGINAL PAPER" 行干扰），从 markdown 补齐真实标题；③分类乱=冒烟测试分类污染+11 篇默认未分类——清测试数据，正式归类 6 类（优化算法 4/深度学习 2/大语言模型 2/统计 1/图像分割 1/ML 综述 1），合成论文残留清理。
+- **"预览变下载"两层根因**：a) FileResponse 默认 `Content-Disposition: attachment`（filename 参数副作用）→ content_disposition_type="inline"；b) **浏览器启发式缓存回放旧 attachment 响应且零请求发往服务器**（访问日志实证）——PDF 端点加 Cache-Control: no-store + iframe URL ?v=2 破缓存 + SPA index.html no-cache 中间件（裸 ASGI 防缓冲 SSE）。
+- **cookie 双通道鉴权**（open-webui [G9] 范式）：登录种 httpOnly cookie（SameSite=Lax，7 天），接口接受 Bearer 或 cookie——解决 iframe/pdf.js 原生请求无法带头的通用问题；新增 /api/auth/logout。容器实测：纯 cookie 拉 PDF 200+inline、登出后 401。
+- **交互优化**（J 线调研 [J1]–[J17]：ai-chatbot/open-webui/LobeChat/ragflow 动效参数）：移动/新建/重命名分类改**下拉与表单模态框**（替换 prompt 填 ID）；动效层=消息入场（8px 上浮 0.3s spring）+流式打字光标+面板滑入（LobeChat 0.28s smooth）+弹窗缩放（flyAndScale 0.95→1）+hover/按压反馈+**prefers-reduced-motion 全局降级**；缓动变量 --ease-spring/--ease-smooth 入 ：root。
+- **运维**：`scripts/start_server.sh` 自愈启动（pkill→等端口释放→setsid→健康检查重试）——终结 ssh 会话 pkill/启动竞争翻车；tag m4 随修复批更新（最终 2874a0b+交互优化批）。
+
 
 
