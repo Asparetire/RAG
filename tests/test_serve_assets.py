@@ -47,14 +47,19 @@ def test_resolve_figure_no_image(monkeypatch, tmp_path):
 
 
 def test_resolve_figure_containment(monkeypatch, tmp_path):
-    """image_path 指向 data/ 之外 → 包含性校验拦下。"""
+    """image_path 指向 doc 解析目录之外 → 包含性校验拦下（穿越守卫）。"""
     chunk = "abc123456789:0001"
-    monkeypatch.setattr(assets, "_fetch_members", lambda ids: {chunk: {"image_path": "parsed/x.png"}})
-    # PARSED_DIR.parent 指到 tmp 里一个假 data/，但解析出的路径在其外
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    monkeypatch.setattr(assets, "PARSED_DIR", tmp_path / "data" / "parsed")
-    monkeypatch.setattr(assets, "PROJECT_ROOT", tmp_path / "elsewhere")
+    parsed_root = tmp_path / "parsed"
+    monkeypatch.setattr(assets, "PARSED_DIR", parsed_root)
+    # 回表返回 doc_id + 相对路径；但解析出的目标在 doc 解析目录之外（绝对路径逃逸）
+    monkeypatch.setattr(assets, "_fetch_members",
+                        lambda ids: {chunk: {"doc_id": "abc123456789",
+                                             "image_path": "../../outside/secret.png"}})
+    assert assets.resolve_figure(chunk) is None
+    # 常规缺失（目录内不存在文件）→ None 而非异常
+    monkeypatch.setattr(assets, "_fetch_members",
+                        lambda ids: {chunk: {"doc_id": "abc123456789",
+                                             "image_path": "images/gone.png"}})
     assert assets.resolve_figure(chunk) is None
 
 

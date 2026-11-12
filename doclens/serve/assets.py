@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from doclens.config import PARSED_DIR, PROJECT_ROOT
+from doclens.config import PARSED_DIR
 from doclens.pipeline import PDF_DIR, _fetch_members
 
 DOC_ID_RE = re.compile(r"^[0-9a-f]{12}$")
@@ -43,18 +43,24 @@ def resolve_pdf(doc_id: str) -> Path | None:
 
 
 def resolve_figure(chunk_id: str) -> Path | None:
-    """chunk_id → 图片文件路径；格式/回表无图/包含性任一不过 → None。"""
+    """chunk_id → 图片文件路径；格式/回表无图/包含性任一不过 → None。
+
+    image_path 为 M2 语义（相对 doc 解析目录）：真实位置 =
+    data/parsed/{doc_id}/{image_path}（m4 修复：与 pipeline._load_image_blob
+    同款 {doc_id} 拼接；包含性校验于该 doc 解析目录内）。
+    """
     if not CHUNK_ID_RE.match(chunk_id or ""):
         return None
     meta = _fetch_members([chunk_id])
     m = meta.get(chunk_id) or {}
     image_path = m.get("image_path")
-    if not image_path or not isinstance(image_path, str) or "\x00" in image_path:
+    doc_id = m.get("doc_id") or ""
+    if not image_path or not isinstance(image_path, str) or "\x00" in image_path \
+            or not DOC_ID_RE.match(doc_id or ""):
         return None
-    p = Path(image_path)
-    if not p.is_absolute():
-        cand = PROJECT_ROOT / image_path
-        p = cand if cand.exists() else PARSED_DIR.parent / image_path
-    if not _contained(p, PARSED_DIR.parent):
+    root = PARSED_DIR / doc_id
+    p = (root / image_path).resolve() if not Path(image_path).is_absolute() \
+        else Path(image_path).resolve()
+    if not _contained(p, root):
         return None
     return p if p.is_file() else None

@@ -67,14 +67,22 @@ def _fetch_members(chunk_ids: list[str]) -> dict[str, dict]:
         conn.close()
 
 
-def _load_image_blob(image_path: str) -> bytes | None:
-    """image_path（M2 落库的相对路径）→ 原图 bytes；缺失容错（trace 记录，不炸主链路）。"""
-    if not image_path:
+def _load_image_blob(doc_id: str, image_path: str) -> bytes | None:
+    """image_path（M2 语义：相对 doc 解析目录）→ 原图 bytes。
+
+    真实位置 = data/parsed/{doc_id}/{image_path}（ingest._image_file 同款拼接，
+    m4 修复：M3 版本漏拼 {doc_id} 段导致图文多模态输入静默失效——图表题一直
+    靠 caption 文本代理答题，B 档语义掩盖了该缺陷；缺失容错保留，trace 可见）。
+    """
+    if not doc_id or not image_path:
         return None
     p = Path(image_path)
-    if not p.is_absolute():
-        p = PROJECT_ROOT / image_path if (PROJECT_ROOT / image_path).exists() \
-            else PARSED_DIR.parent / image_path
+    if p.is_absolute():
+        try:
+            return p.read_bytes()
+        except OSError:
+            return None
+    p = PARSED_DIR / doc_id / image_path
     try:
         return p.read_bytes()
     except OSError:
@@ -235,7 +243,7 @@ async def run_pipeline(
         _emit(on_event, "thinking", status="started")
         blobs = {}
         for img in ctx.images:
-            b = _load_image_blob(img.image_path)
+            b = _load_image_blob(img.doc_id, img.image_path)
             if b is not None:
                 blobs[img.image_path] = b
 

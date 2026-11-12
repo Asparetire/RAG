@@ -102,6 +102,9 @@ class Settings(BaseSettings):
     gen_max_tokens: int = 2048        # R9"从紧"口径：thinking 模型 completion 含思考 token
     gen_max_tokens_retry: int = 4096  # K7 空答案守卫重试档（上调一档）
 
+    # --- 服务（M4）：SPA 托管显式开关（交付形态；dev 期保持关，/api 不受干扰） ---
+    web_static: bool = False
+
 
 settings = Settings()
 

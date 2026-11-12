@@ -29,7 +29,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 
-from doclens.config import PROJECT_ROOT, PROFILES
+from doclens.config import PROJECT_ROOT, PROFILES, settings
 from doclens.pipeline import run_pipeline
 from doclens.serve.assets import resolve_figure, resolve_pdf
 
@@ -132,14 +132,16 @@ def create_app(pipeline=None) -> FastAPI:
     def api_health() -> dict:
         return {"ok": True}
 
-    # ---- SPA 托管（交付形态；web/dist 存在才挂，dev 期不干扰）----
+    # ---- SPA 托管（交付形态，K2/R1）：显式开关 WEB_STATIC=1 才挂（dev 期 dist 存在
+    # 也不干扰 /api）；fastapi>=0.162 官方 frontend()，fallback=auto 即 history fallback
+    # （API 路由优先于前端，注册顺序已保证）。旧版无该 API 时退 StaticFiles。
     dist = PROJECT_ROOT / "web" / "dist"
-    if dist.is_dir():
+    if settings.web_static and dist.is_dir():
         if hasattr(app, "frontend"):
-            app.frontend(str(dist))
+            app.frontend("/web", directory=str(dist), fallback="auto")
         else:
             from fastapi.staticfiles import StaticFiles
-            app.mount("/", StaticFiles(directory=dist, html=True), name="web")
+            app.mount("/web", StaticFiles(directory=dist, html=True), name="web")
 
     return app
 

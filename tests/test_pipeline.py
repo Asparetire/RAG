@@ -77,3 +77,25 @@ def test_guard_whitespace_only_is_empty():
     assert gen.answer == "正文"
     assert empty is False
     assert len(calls) == 2
+
+
+def test_load_image_blob_doc_relative(monkeypatch, tmp_path):
+    """image_path 的 M2 语义=相对 doc 解析目录：data/parsed/{doc_id}/{image_path}。
+
+    回归位：M3 版本漏拼 {doc_id} 段 → 图文多模态输入静默失效（2026-11-12 发现）。
+    """
+    from doclens import pipeline
+
+    doc_id = "abc123456789"
+    img = tmp_path / "parsed" / doc_id / "images"
+    img.mkdir(parents=True)
+    (img / "p1.jpg").write_bytes(b"\xff\xd8fake")
+    monkeypatch.setattr(pipeline, "PARSED_DIR", tmp_path / "parsed")
+
+    blob = pipeline._load_image_blob(doc_id, "images/p1.jpg")
+    assert blob == b"\xff\xd8fake"
+    # 缺失容错：None 不炸主链路
+    assert pipeline._load_image_blob(doc_id, "images/missing.jpg") is None
+    assert pipeline._load_image_blob("", "images/p1.jpg") is None
+    # 绝对路径直读（防御性保留）
+    assert pipeline._load_image_blob(doc_id, str(img / "p1.jpg")) == b"\xff\xd8fake"
