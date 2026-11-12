@@ -4,6 +4,7 @@ import { useCallback, useMemo, useReducer, useRef, useState } from 'react'
 import { askQuestion } from './api.js'
 import ChatPane from './components/ChatPane.jsx'
 import SourceSidebar from './components/SourceSidebar.jsx'
+import PdfPane from './components/PdfPane.jsx'
 
 let _seq = 0
 const nextSeq = () => ++_seq
@@ -155,6 +156,9 @@ export default function App() {
           activeSource={activeSource}
           onSourceClick={setActiveSource}
         />
+        {activeSource && (
+          <PdfPane src={activeSource} onClose={() => setActiveSource(null)} />
+        )}
       </div>
     </div>
   )
