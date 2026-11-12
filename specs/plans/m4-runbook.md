@@ -1,7 +1,8 @@
 # M4 服务+UI Runbook
 
-> **状态：待批准（G1 确认门）** ｜ slug：`m4-serving-ui` ｜ 依据：[主计划 §5 M4](doclens-multimodal-rag.plan.md)、[PRD FR-4.2/4.3、FR-5.1–5.4、S2](../prds/doclens-multimodal-rag.prd.md)、[m3-runbook](m3-runbook.md)（M3 产物即 M4 管线）、[m4 调研笔记](../research/m4-serving-ui-survey.md)（R1–R12 + §1.4 契约 + §7 高分项目对比）、[m4-ui-mockup.html](../research/m4-ui-mockup.html)（前端布局蓝本）
-> **输入观察项（2026-11-12 冒烟人工判定）**：① A 档 s01 空答案根因=max_tokens 被 reasoning 耗尽 → K7 空答案守卫；② D 档当日 trace 被后续跑次覆盖 → 演示跑前备份纪律；③ MinerU LaTeX 数字内插空格 → 证据核验先去空白（对 M4 无代码影响，记录在案）。
+> **状态：实现中（2026-11-12 增补范围实现完毕，验收收官走 S3+S4 双审+tag m4）** ｜ slug：`m4-serving-ui` ｜ 依据：[主计划 §5 M4](doclens-multimodal-rag.plan.md)、[PRD FR-4.2/4.3、FR-5.1–5.4、S2](../prds/doclens-multimodal-rag.prd.md)、[m3-runbook](m3-runbook.md)（M3 产物即 M4 管线）、[m4 调研笔记](../research/m4-serving-ui-survey.md)（v1.4：R1–R12 + §1.4 契约 + §7–§11 五轮调研）、[m4-ui-mockup.html](../research/m4-ui-mockup.html)（前端布局蓝本）
+> **输入观察项（2026-11-12 冒烟人工判定）**：① A 档 s01 空答案根因=max_tokens 被 reasoning 耗尽 → K7 空答案守卫（已实现）；② D 档当日 trace 被后续跑次覆盖 → 演示跑前备份纪律；③ MinerU LaTeX 数字内插空格 → 证据核验先去空白（对 M4 无代码影响，记录在案）。
+> **实施进度（2026-11-12）**：4.0–4.7 全部完成并实测（SSE 事件序吻合契约/稳态 15.5s/图片附载 bug 顺手修）；4.9 登录门（argon2+JWT/session_stamp 全端吊销/限流，401 门实测）+4.10 模型反馈切换（/api/models 白名单/body.model 校验回退/done 带模型，kimi-k3 端到端实测）+4.8 论文库（8 表就绪/分类树 CRUD+环检测/dedup 409/去重守卫实测，全流程待真实新论文）——新增依赖 pwdlib/PyJWT/python-multipart 双端锁版；管理员密码随机生成入 .env 不入库。
 
 ---
 
