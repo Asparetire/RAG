@@ -186,9 +186,12 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         if p is None:
             raise HTTPException(status_code=404, detail="not found")
         # content_disposition_type="inline"：S3 体检②——FileResponse 默认 attachment
-        # 会让 iframe 原生预览变成"直接下载"（浏览器见 attachment 即下载）
+        # 会让 iframe 原生预览变成"直接下载"（浏览器见 attachment 即下载）。
+        # Cache-Control: no-store（S3 体检④）：不带缓存头的响应会被浏览器启发式缓存——
+        # 曾发生"旧 attachment 响应被本地缓存回放→一直下载、服务器零请求"的事故。
         return FileResponse(p, media_type="application/pdf", filename=f"{doc_id}.pdf",
-                            content_disposition_type="inline")
+                            content_disposition_type="inline",
+                            headers={"Cache-Control": "no-store"})
 
     # ---- 图/表原图（R8：chunk_id 回表，K8① 包含性）----
     @protected.get("/api/figure/{chunk_id}")
@@ -338,6 +341,8 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
     # ---- SPA 托管（交付形态，K2/R1）：显式开关 WEB_STATIC=1 才挂（dev 期 dist 存在
     # 也不干扰 /api）；fastapi>=0.162 官方 frontend()，fallback=auto 即 history fallback
     # （API 路由优先于前端，注册顺序已保证）。/web 豁免鉴权（登录页在 SPA 内）。
+    # S3 体检④：index.html 必须 no-cache——否则旧 shell+旧 bundle 被浏览器缓存，
+    # 前端更新后用户端永远拿旧的（本轮事故：用户页面跑旧 bundle 复现已修 bug）。
     dist = PROJECT_ROOT / "web" / "dist"
     if settings.web_static and dist.is_dir():
         if hasattr(app, "frontend"):
@@ -349,4 +354,26 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
     return app
 
 
+def _no_cache_html_middleware(app):
+    """ASGI 中间件：/web 的 HTML 响应强制 no-cache（S3 体检④）。
+
+    不用 BaseHTTPMiddleware（避免流式响应被缓冲——SSE 会挂），直接裸 ASGI 包装。
+    """
+
+    async def wrapped(scope, receive, send):
+        if scope["type"] == "http" and scope.get("path", "").startswith("/web"):
+            async def send_wrapper(message):
+                if message["type"] == "http.response.start":
+                    headers = list(message.get("headers", []))
+                    headers.append((b"cache-control", b"no-cache, max-age=0"))
+                    message = {**message, "headers": headers}
+                await send(message)
+            await app(scope, receive, send_wrapper)
+        else:
+            await app(scope, receive, send)
+
+    return wrapped
+
+
 app = create_app()
+app = _no_cache_html_middleware(app)

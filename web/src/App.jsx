@@ -279,7 +279,7 @@ export default function App() {
             <iframe
               className="pdf-frame"
               title={libraryPaper.title}
-              src={`/api/docs/${libraryPaper.doc_id}/pdf#page=1&view=FitH`}
+              src={`/api/docs/${libraryPaper.doc_id}/pdf?v=2#page=1&view=FitH`}
             />
           </div>
         )}
