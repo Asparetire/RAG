@@ -98,6 +98,10 @@ class Settings(BaseSettings):
     mineru_bin: str = ""        # mineru-kit CLI 绝对路径，两端 .env 各自配置（容器 /opt/...；Windows D:\soft\anaconda\envs\doclens-mineru\Scripts\mineru-kit.exe）
     mineru_timeout: int = 1800  # 单篇解析超时（秒）
 
+    # --- 生成（M4：max_tokens 参数位 + K7 空答案守卫重试档；演示档可经 .env 调低） ---
+    gen_max_tokens: int = 2048        # R9"从紧"口径：thinking 模型 completion 含思考 token
+    gen_max_tokens_retry: int = 4096  # K7 空答案守卫重试档（上调一档）
+
 
 settings = Settings()
 

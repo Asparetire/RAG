@@ -79,12 +79,15 @@ async def generate_answer(
     stream: bool = False,
     max_tokens: int = 2048,
     timeout: float = 120.0,
+    on_delta=None,
 ) -> GenResult:
     """调 gen_model（glm-5.3-flash）生成带引用的答案。
 
     question：显式参数优先于 ctx.question（两者不一致时以参为准）；
-    image_blobs：image_path → 原图 bytes（读取归 3.5 CLI；缺文件的图跳过不附）。
-    异常不在此吞——调用方（3.5 CLI）决定重试/降级。
+    image_blobs：image_path → 原图 bytes（读取归调用方；缺文件的图跳过不附）。
+    on_delta：M4 流式事件钩子（仅 stream=True 时生效），签名 cb(kind, text)，
+      kind ∈ ("reasoning", "content")——reasoning 只进该钩子（R5 双字段分流），
+      绝不混入 answer。异常不在此吞——调用方决定重试/降级。
     """
     if question and question != ctx.question:
         ctx = dataclasses.replace(ctx, question=question)
@@ -125,12 +128,16 @@ async def generate_answer(
             if reasoning:
                 # R9 分流：思考内容只累计进 trace，绝不进答案
                 reasoning_parts.append(reasoning)
+                if on_delta is not None:
+                    on_delta("reasoning", reasoning)
             content = getattr(delta, "content", None)
             if content:
                 if ttft_ms is None:
                     # 正文首 token 口径（R9）：思考阶段不算 TTFT
                     ttft_ms = (time.perf_counter() - t0) * 1000.0
                 answer_parts.append(content)
+                if on_delta is not None:
+                    on_delta("content", content)
         answer_text = "".join(answer_parts)
         reasoning_text = "".join(reasoning_parts)
         usage_tokens, prompt_tokens = _usage_tokens(usage)
