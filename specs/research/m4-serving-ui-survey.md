@@ -1,6 +1,6 @@
 # DocLens M4 服务+UI·规划审查与同类项目调研笔记
 
-> 状态：**v1.1（已核实为主）**——2026-11-11 立稿（v1.0：P/G/R 审查+A/B 两线调研）；**2026-11-12 增补 §7 高分项目横评（C 线）与 §8 交互与协议深挖（D 线）**，随 M4 立项 G1 一并过目。审查结论为本会话实测核实（SSH 探针/源码/数据）；A/B/C/D 四条调研线由研究代理并行完成，web_search 全程 HTTP 402 不可用，全部经 ghfast.top/ungh.cc 代理直抓官方文档与源码核实；未能核实项在 §5 列明。
+> 状态：**v1.2（已核实为主）**——2026-11-11 立稿（v1.0：P/G/R 审查+A/B 两线调研）；**2026-11-12 增补 §7 高分项目横评（C 线）、§8 交互与协议深挖（D 线）、§9 论文库调研（E/F 线）**。审查结论为本会话实测核实（SSH 探针/源码/数据）；A/B/C/D/E/F 六条调研线由研究代理并行完成，web_search 全程 HTTP 402 不可用，全部经 ghfast.top/ungh.cc 代理直抓官方文档与源码核实；未能核实项在 §5 列明。
 > 用途：主计划 M4 节（`doclens-multimodal-rag.plan.md` §5 M4）的问题审查 + [m4-runbook](../plans/)（**待立项**）的方案佐证与修订输入，随 G1 确认门一并过目。
 > **配套演示**：[m4-ui-mockup.html](m4-ui-mockup.html)——单文件交互原型（无后端、无构建，浏览器直接打开）：演示 §1.4 契约的完整时序（阶段条 → sources 先于首 token → 思考折叠面板 → 流式正文+可点击引用 → bbox 百分比高亮 → citations/done），含图表题/表格题/不可回答题三个剧本（bbox 抄自真实 doc.json 探针值）；M4 runbook 立项时可直接作前端布局蓝本。
 > 与 [m3-retrieval-generation-survey](m3-retrieval-generation-survey.md) 强关联：M4 的 SSE 契约直接消费 M3 调研 R9（思考流）/R11（引用编号语义）/R15（trace 字段），本文不重复引用其原文，只标"m3 调研 R#"。
@@ -274,6 +274,35 @@ event: error      data: {"code":"...","message":"...（脱敏）"}
 | [D14]–[D16] | FastGPT main：packages/global/core/workflow/runtime/{constants,sse}.ts、projects/app/src/pages/api/v1/chat/completions.ts |
 
 > 失败路径：ungh 文件端点 302→raw.githubusercontent（DNS 拦截不可跟）、jsdelivr 报包超 50MB、sourcegraph 403、RAGFlow 组件路径探测 404（v1.0 重写）——message_end 的 metadata 细节、OpenWebUI 思考三态渲染细节、RAGFlow 组件级引用流程标〔未核实〕，未编造。
+
+## 9. 论文库调研（E/F 线，2026-11-12——「上传入库+树状分类」需求专项）
+
+> 动机：新增论文库功能（UI 上传 PDF→后台入库→立即可检索；树状分类目录）立项前，对 dify(161k★)/ragflow(94k★)/open-webui(158k★)/FastGPT(30k★)/MaxKB(23k★)/anything-llm(68k★) 的**上传管线**与**知识库组织 UI** 做源码级横评。RAGFlow 1.0（2026-11-06 GA）后端重写为 Go+NATS，经典 Python 架构证据取 v0.27.2 tag。
+
+### 9.1 E 线：上传与入库管线 [E1]–[E15]
+
+- **上传接口**：五家全部 multipart 直传，"先落盘建记录、同步返回、再异步解析"。dify 另有 `GET /files/upload` 把大小/批量上限下发前端预检；MaxKB 限 100MB；大小/扩展名校验放上传口同步 4xx，解析失败放任务侧。
+- **任务模型**：dify=celery+Redis（beat 扫描 stalled 恢复）；ragflow v0.27=独立 task_executor 消费 Redis Stream 消费组（未 ack 自动重投）；FastGPT=Mongo 行即队列（lockTime 抢锁+retryCount 3 次+TTL）；MaxKB=celery+celery_once 防重入；**open-webui=FastAPI BackgroundTasks 进程内后台——五家唯一不用外部队列，与 DocLens 体量同款**。进度反馈全部前端轮询查库（open-webui 另有 1s 查库 SSE 端点），无一家用 WS。
+- **状态机**：dify 最细（waiting→parsing→cleaning→splitting→indexing→completed/error，轮询按 batch 返回 completed_segments/total_segments+error 文本+各阶段时间戳）；ragflow=progress∈[0,1]+progress_msg 逐条（-1 即失败，支持取消）；open-webui=pending→processing→completed/failed。
+- **解析架构**：解析器注册表+统一流程（ragflow FACTORY 十余种解析器同签名；**MinerU 是 ragflow 内置 PDF 解析器且超时可配**——佐证 mineru-kit 桥接复用）；最耗时=解析（OCR/版面）与 LLM 增强，故全部异步化。
+- **校验结论**：①"任务状态落库+轮询"成立；②采纳 batch 聚合号（一次轮询覆盖本次上传全部文档）+状态对齐 dify 粒度（queued/parsing/indexing/completed/error+chunk 计数+error 文本）；③进程内后台的"重启丢任务"用**启动扫描**兜底（超阈值的 processing 任务标 failed），不引 celery；④上传校验与解析解耦。
+
+### 9.2 F 线：知识库组织与树状 UI [F1]–[F15]
+
+- **数据模型**：真树自引用 2/5——**FastGPT 最佳先例**（分类与库同表 type 区分 folder/dataset，parentId+**ancestorIds 物化路径**加速子树查询+可配置 maxFolderDepth）；open-webui（folder 表 parent_id 无外键，移动做环检测+"不能移入自身/子树"，折叠状态持久化）。平铺 3/5——AnythingLLM workspaces（slug 唯一）、Dify datasets（无分组字段，靠标签）、RAGFlow 卡片流。
+- **组织形态**：**顶层清一色平铺**（卡片流/表格+搜索筛选），树只出现在下钻层——FastGPT 点文件夹换 URL 逐层下钻+面包屑+文件夹侧卡（改名/移动/批量）；open-webui 对话文件夹树在侧栏（可折叠、展开状态入库）。移动交互用弹窗/按钮而非拖拽（FastGPT）。
+- **状态 UI（RAGFlow 范式最完整）**：文档页表格列=复选框批量/名称/上传时间/启用开关/chunk 数/解析器/状态/操作；状态七态枚举，RUNNING 显示进度条+百分比且可点开解析日志弹窗，FAIL/DONE 给重解析按钮（弹确认框），RUNNING 可取消（整行置灰遮罩）。
+- **上传交互**：**入口在容器内部**——open-webui 知识库详情页整页拖拽+按钮（本地/URL/文本/整目录），上传目标=当前浏览目录（**无需弹窗选分类**）；上传项在列表顶部显示 uploading→processing 状态机+toast。
+- **校验结论**：①t_category 自引用树成立（FastGPT 先例：加 ancestor_ids 冗余+环检测+层级上限常量）；②顶层用平铺列表、树管导航——**"分类树侧栏+主区论文列表+面包屑"是合理落位**；③状态字段=status 枚举+progress+error 文本，UI 照 RAGFlow 范式（徽标+进度条+重试+日志）；④上传入口放"当前分类上下文"，不弹窗选分类；⑤点击论文复用 PDF 面板合理（条目就地查看是共识）。
+
+### 9.3 来源清单（E/F 线，2026-11-12 实抓；GitHub 原文均经 ghfast.top 代理，RAGFlow 另经 Gitee 镜像）
+
+| 线 | 来源 |
+|---|---|
+| E 线 | [E1–E5] ungh 仓库元信息；[E6] dify api/tasks/document_indexing_task.py；[E7] dify api/controllers/console/files.py；[E8] dify api/controllers/service_api/dataset/document.py（create-by-file/batch/状态机原文）；[E9] ragflow rag/svr/task_executor.py@v0.27.2（Redis Stream/FACTORY/进度/心跳自愈/80min 超时）；[E10] MaxKB apps/dataset/serializers/document_serializers.py；[E11][E12] FastGPT dataset training/collection schema.ts；[E13] open-webui backend/open_webui/routers/files.py（BackgroundTasks/状态字段/SSE 状态端点）；[E14] open-webui routers/knowledge.py（pending 中断重试）；[E15] dify api/extensions/ext_celery.py（beat sweep） |
+| F 线 | [F1][F2] open-webui models/folders.py+routers/folders.py（parent_id/环检测/展开持久化）；[F3][F4] anything-llm prisma schema+workspace.js（平铺/slug）；[F5][F6] dify datasets 列表页两版（卡片网格/enable_knowledge_fs）；[F7] dify api/models/dataset.py（无分组字段/状态机）；[F8] FastGPT dataset/schema.ts（parentId+ancestorIds+type+maxFolderDepth）；[F9][F10] open-webui Knowledge.svelte+KnowledgeBase.svelte（列表徽标/库内目录树/上传状态机）；[F11] ragflow datasets 列表页；[F12]–[F14] ragflow use-dataset-table-columns/parsing-status-cell/reparse-dialog+process-log-modal（七态+进度条+取消/重解析）；[F15] FastGPT dataset/list/index.tsx（下钻/面包屑/文件夹侧卡/批量移动） |
+
+> 〔未核实〕FastGPT 队列消费器循环、AnythingLLM 前端侧栏形态、Dify/RAGFlow 上传控件视觉形态、message_end metadata 细节等——均不影响结论。
 
 ## 5. 待人工核实
 
