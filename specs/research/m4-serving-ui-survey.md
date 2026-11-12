@@ -1,6 +1,6 @@
 # DocLens M4 服务+UI·规划审查与同类项目调研笔记
 
-> 状态：**v1.3（已核实为主）**——2026-11-11 立稿（v1.0：P/G/R 审查+A/B 两线调研）；**2026-11-12 增补 §7 高分项目横评（C 线）、§8 交互与协议深挖（D 线）、§9 论文库调研（E/F 线）、§10 多用户调研（G/H 线）**。审查结论为本会话实测核实（SSH 探针/源码/数据）；A–H 八条调研线由研究代理并行完成，web_search 全程 HTTP 402 不可用，全部经 ghfast.top/ungh.cc/qdrant.tech 代理直抓官方文档与源码核实；未能核实项在 §5 列明。
+> 状态：**v1.4（已核实为主）**——2026-11-11 立稿（v1.0：P/G/R 审查+A/B 两线调研）；**2026-11-12 增补 §7 高分项目横评（C 线）、§8 交互与协议深挖（D 线）、§9 论文库调研（E/F 线）、§10 多用户调研（G/H 线）、§11 模型可见性与切换调研（I 线）**。审查结论为本会话实测核实（SSH 探针/源码/数据）；A–I 九条调研线由研究代理并行完成，web_search 全程 HTTP 402 不可用，全部经 ghfast.top/ungh.cc/qdrant.tech/ai-sdk.dev 代理直抓官方文档与源码核实；未能核实项在 §5 列明。
 > 用途：主计划 M4 节（`doclens-multimodal-rag.plan.md` §5 M4）的问题审查 + [m4-runbook](../plans/)（**待立项**）的方案佐证与修订输入，随 G1 确认门一并过目。
 > **配套演示**：[m4-ui-mockup.html](m4-ui-mockup.html)——单文件交互原型（无后端、无构建，浏览器直接打开）：演示 §1.4 契约的完整时序（阶段条 → sources 先于首 token → 思考折叠面板 → 流式正文+可点击引用 → bbox 百分比高亮 → citations/done），含图表题/表格题/不可回答题三个剧本（bbox 抄自真实 doc.json 探针值）；M4 runbook 立项时可直接作前端布局蓝本。
 > 与 [m3-retrieval-generation-survey](m3-retrieval-generation-survey.md) 强关联：M4 的 SSE 契约直接消费 M3 调研 R9（思考流）/R11（引用编号语义）/R15（trace 字段），本文不重复引用其原文，只标"m3 调研 R#"。
@@ -339,6 +339,37 @@ event: error      data: {"code":"...","message":"...（脱敏）"}
 | H 线 | [H1] qdrant.tech multitenancy 权威页（三方案/is_tenant/collection 开销与上限）；[H2] dify api/models/dataset.py（三层 tenant_id/复合索引/collection 命名/关键词表）；[H3] dify api/models/account.py（tenants/成员关系）；[H4] dify dataset_retrieval.py（检索入口租户过滤+二次授权）；[H5] ragflow v0.27.2 db_models.py（tenant/user_tenant/KB）；[H6] ragflow rag/nlp/search.py（租户索引/kb_id 过滤/混合检索）；[H7][H8] anything-llm workspace.js+stream.js（workspace_users 可见性/namespace）；[H9] FastGPT dataset schema（teamId 冗余+复合索引） |
 
 > 〔未核实〕FastGPT PG 向量表租户列与全文细节、dify 检索内核逐行（main 重构致旧路径 404，collection 划分与入口过滤已实证）、RAGFlow API 层权限校验位置——均不影响分级结论。
+
+## 11. 模型可见性与切换调研（I 线，2026-11-12——「前端反馈当前模型+可切换」专项）
+
+> 对象：vercel/ai-chatbot（对话内模型选择器标杆）/open-webui/anything-llm/dify（配置层级对照）+RAGFlow 静态模型目录。
+
+### 11.1 事实要点 [I1]–[I13]
+
+- **模型清单端点**：ai-chatbot=源码硬编码白名单 chatModels[]（{id,name,provider,description,reasoningEffort}）+DEFAULT_CHAT_MODEL 常量，GET /api/models 附能力探测（tools/vision/reasoning，24h 缓存）；open-webui=服务端聚合（Ollama/OpenAI/预设别名/arena，条目含 capabilities/params）；anything-llm=provider 静态 switch 枚举无清单端点；ragflow=仓库静态 JSON 目录（conf/llm_factories.json）。
+- **选择器 UI**：ai-chatbot 选择器在**输入框底部工具栏**（按钮=当前模型名，弹层带搜索+分组+能力图标，单选）；open-webui 支持多模型并选+"Set as default"+**每条回答头部直接显示该消息所用模型名**；anything-llm/dify 聊天界面不选模型（工作区设置/应用编排里配）。
+- **作用域层级**：请求级（ai-chatbot 每条消息 body 必带 selectedChatModel+**服务端白名单校验、非法回退默认**）→ 会话级（open-webui chat.models 持久化重开恢复）→ 资源级（anything-llm workspace 覆盖系统级；dify app 编排固定 model config）。
+- **生效机制**：四例全部**即时生效**（ai-chatbot=React 状态+cookie 持久化默认（chat-model，1 年）；open-webui=中途切换只影响后续消息，历史消息各自记录模型；anything-llm=请求时实时解析+modelRouteNotification）。
+
+### 11.2 对 DocLens 的校验结论
+
+1. **"请求级参数（query body 带 model）+/api/models 清单端点+输入区选择器"=ai-chatbot 现行架构，主流标杆做法成立**（与现有 profile 档位同一模式）。
+2. 单供应商多模型场景：**白名单写死 config 是惯例**（ai-chatbot chatModels/ragflow 静态 JSON）——方舟 Coding Plan 支持列表入 config，防任意模型注入；建议 /api/models 附能力标记（vision/thinking，正好服务 gen/rerank 分档展示）。
+3. **服务端必须白名单校验 body.model 并回退默认**（前端不可信，ai-chatbot 模式）。
+4. "本答案所用模型"先例充分（open-webui 每条回答头部显示；dify Message 表落库 model_provider/model_id）——答案 meta 区显示模型名成立。
+5. 切换作用域：请求级+cookie 持久化默认（ai-chatbot 模式）即可，无需 workspace/租户层级；重排 flash/pro 两档借能力标记区分展示。
+
+### 11.3 来源清单（I 线，2026-11-12 实抓，均经 ghfast.top 代理）
+
+| # | 来源 |
+|---|---|
+| [I2]–[I7] | vercel/ai-chatbot：lib/ai/models.ts（白名单/能力探测）、api/models/route.ts、components/chat/multimodal-input.tsx（选择器/cookie）、api/chat/schema.ts+route.ts（selectedChatModel 校验回退）、use-active-chat.tsx（cookie 水合注入）、tests/e2e/model-selector.test.ts |
+| [I8] | open-webui backend/open_webui/routers/models.py+utils/models.py（聚合/preset/能力/缓存） |
+| [I9] | anything-llm server/utils/chats/stream.js+helpers（workspace 覆盖/请求级参数/静态枚举/modelRouteNotification） |
+| [I10][I11] | open-webui ModelSelector.svelte（多选/设默认/置顶）+Chat.svelte/ResponseMessage.svelte（chat.models 持久化/默认解析链/消息显示模型名） |
+| [I12][I13] | dify api/models/model.py（AppModelConfig/Message 落库 model_provider/model_id）；ragflow 文件树（conf/llm_factories.json 静态目录） |
+
+> 〔未核实〕anything-llm 设置页具体 UI 文件、ragflow dialog.llm_id 绑定细节、dify docs 三次连接失败——均不影响结论。
 
 ## 5. 待人工核实
 
