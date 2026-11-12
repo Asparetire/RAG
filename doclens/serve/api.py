@@ -55,11 +55,10 @@ _MEDIA_BY_SUFFIX = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/j
 
 
 def _sanitize_error(exc: BaseException) -> str:
-    """error 事件 message 脱敏（R10⑤）：key 形态打码 + 截断，防内部细节外泄。"""
-    msg = str(exc)
-    msg = re.sub(r"(sk-[A-Za-z0-9]{6})[A-Za-z0-9_-]+", r"\1***", msg)
-    msg = re.sub(r"(api[_-]?key\s*[=:]\s*)\S+", r"\1***", msg, flags=re.IGNORECASE)
-    return msg[:300]
+    """error 事件 message 脱敏（R10⑤）——实现已移至 serve.sanitize（S4 M4-05：与任务
+    error 字段共用口径）；保留薄壳以兼容既有引用/测试。"""
+    from doclens.serve.sanitize import sanitize_error
+    return sanitize_error(exc)
 
 
 def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:

@@ -139,5 +139,19 @@
 - 新发现三项（记录于报告结论，移交 M4）：① A 档 s01 空答案根因=max_tokens(2048) 被 reasoning 耗尽（6932 字符思考、content 空，usage 5297=prompt 3249+2048），管线缺空答案守卫；② D 档当日 trace 被后续跑次清理（traces-20261111.jsonl 仅剩 22:03 后 130 行），全文回放不可用——trace 保留纪律待补；③ MinerU LaTeX 数字内插空格（"0. 6 2 2 4"），证据核验需先去空白再匹配。
 - smoke_A.md 同步补判 19/20（s01 空答案异常在案）：A 档"纯文本独立可跑"结论不变；新 s15 在此首次全量验证通过。
 
+## 2026-11-12｜feat：M4 服务+UI 收官（SSE 问答/引用高亮/登录门/模型切换/论文库，tag m4）
+
+- **4.0–4.7 主范围**：共享管线事件化（`doclens/pipeline.py`，CLI/SSE 单一编排源，query_cli 削成薄壳）+ K7 空答案守卫（max_tokens 被 reasoning 耗尽→重试一次→拒答，冒烟观察项①闭环）+ FastAPI 服务层（`doclens/serve/api.py+assets.py`：SSE 契约=sse-starlette ping 15s、docs/pdf/figure 资产、路径穿越守卫=严格正则+realpath 包含性）+ SSE 契约测试（mock 管线断言事件序/schema/脱敏）+ React 前端（`web/`：对话流式+思考三态面板（ai-chatbot 范式：流式展开→1s 折叠"已思考 N 秒"）+stage 步进条+引用 chip+来源侧栏（各路分数小字）+react-pdf 11 原页 bbox 百分比 overlay（0-1 归一化×视口，脉冲动画）+PDF 面板复用）+ 交付形态（WEB_STATIC=1 + FastAPI frontend("/web") + vite base，dist 入库）。
+- **实测**：SSE 事件序逐字吻合冻结契约（stage×4→sources→thinking→reasoning×429→token×209→citations→done）；图表题稳态 **15.5s**（重排缓存命中 24ms，≤20s 达标）；bbox 抽检+穿越拦截+拒答展示全过。
+- **4.9 登录门 L0**（调研 §10 G 线）：单管理员 argon2（pwdlib）+JWT HS256（PyJWT）+session_stamp（改密全端吊销）+登录限流 5 次/3min+假哈希防时序探测；APIRouter 公开/受保护分组一把门（health/login 豁免）；S3 M-4 空凭据 fail-fast。管理员密码随机生成入 .env 不入库。
+- **4.10 模型反馈+切换**（调研 §11 I 线）：`GET /api/models`（config 白名单 3 模型+vision/thinking 能力标记+默认值）+ query body.model 服务端白名单校验回退默认（前端不可信）+ done 事件带 model + 前端输入框工具栏选择器（ai-chatbot 范式）+ 答案 meta 显示所用模型；kimi-k3 端到端切换实测。重排缓存键天然含 model（t_rerank_cache 隔离）。
+- **4.8 论文库**（调研 §9 E/F 线）：`t_category`（FastGPT 式树：自引用+ancestor_ids 物化路径+MEMBER OF 子树查询+环检测+层级上限 3）+ `t_ingest_task`（dify 式状态机 queued/parsing/indexing/completed/error+chunk 计数+error 文本+batch 聚合号）+ t_doc 幂等补列（category_id/user_id）+ `doclens/paperlib.py`（树 CRUD+任务状态机+单篇入库编排复用 intake/parse_pdf/process_doc/BM25+启动扫描兜底）+ API（upload multipart+sha256 前置去重 409+tree/tasks/retry/categories CRUD/论文移动）+ 前端论文库视图（顶栏切换+分类树+论文表格 RAGFlow 式徽标+上传入口在当前分类上下文+2s 轮询+点击复用 PdfPane）。
+- **S3 审查**（`specs/reviews/m4-serving-ui.review.md`）：1 Blocker+5 Major+7 Minor+4 Nit——**B-1（canonical PDF 不落盘→预览/重试断链）+M-1（JSON/IN 子树查询恒假→MEMBER OF+容器三层树实测）+M-2（category_id Form() 静默丢失）+M-3（vite base /web 交付态白屏）+M-4（空凭据 fail-fast）+M-5（启动扫描接线）**全修；m-1/m-2/m-6 随批修；m-3/m-4/m-5/m-7 记待办池。
+- **顺手修 M3 遗留 bug**：`_load_image_blob` 漏拼 {doc_id} 段——**M3 冒烟期间图文多模态输入静默失效**（图表题靠 caption 文本代理掩盖）；修复后 trace images attached:5。M5 消融 C 档口径备注：此前图像路价值被低估。
+- **S4 安全复查**：结论见 `specs/reviews/m4-serving-ui.security.md`（登录门/上传/穿越/提示注入升格复查——m3 S4 预告项闭环）。
+- **调研沉淀**（`specs/research/m4-serving-ui-survey.md` v1.4，§7–§11 五轮、9 条调研线）：§7 高分项目横评 12 家（SSE 一统 7/12、bbox 稀缺 2/12）、§8 交互协议（思考三态范式/SSE 三家校验）、§9 论文库（上传管线 5 家/树组织 5 家）、§10 多用户（L0 登录门/L1 可空 user_id 预埋/L2 隔离只写文档）、§11 模型切换（请求级+白名单+cookie 范式）。
+- **测试**：195 passed 双端（+25：契约鉴权/auth 5/资产安全 7/守卫 5/模型 2 等）；新增依赖 pwdlib[argon2]==0.3.1/PyJWT==2.15.1/python-multipart==0.0.33 双端锁版对齐。
+- **待办移交**：①上传全流程终验用真实新论文（合成 PDF 版式超 MinerU 预期输入，已验证失败路径与 B-1 canonical 落盘）；②S3 m-3 非 vision 模型带图过滤/m-4 上传分块落盘/m-7 paperlib 单测池；③paperlib 4.8 冒烟报告入 reports/（沿 M3 惯例）。
+
 
 

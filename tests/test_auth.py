@@ -39,6 +39,19 @@ def test_rate_limit_blocks_after_5(monkeypatch):
     auth.reset_attempts(key)
 
 
+def test_rate_limit_ip_only_no_username_rotation_bypass(monkeypatch):
+    """S4 M4-01：同 IP 轮换 username 不得绕过限流（key 仅按 IP 聚合）。"""
+    monkeypatch.setattr(auth, "_admin_hash_cache", None)
+    auth.reset_attempts("rotate-ip")
+    for i in range(auth._MAX_ATTEMPTS):
+        with pytest.raises(HTTPException):
+            auth.try_login("bad", ip="rotate-ip", username=f"user{i}")  # 每次换用户名
+    with pytest.raises(HTTPException) as ei:
+        auth.try_login(auth.settings.admin_password, ip="rotate-ip", username="whatever")
+    assert ei.value.status_code == 429
+    auth.reset_attempts("rotate-ip")
+
+
 def test_decode_rejects_tampered_and_expired():
     token = auth.create_access_token()
     with pytest.raises(HTTPException):

@@ -389,8 +389,10 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
                         progress_msg=f"入库完成 text={r['n_text']} img={r['n_img']}",
                         completed_chunks=r["n_text"], total_chunks=r["n_text"] + r["n_img"])
         except Exception as exc:  # noqa: BLE001 任务侧兜底：错误文本落库（dify 范式）
+            # S4 M4-05：error 文本与 SSE error 同口径脱敏（防路径/凭据片段入库回显）
+            from doclens.serve.sanitize import sanitize_error
             update_task(task_id, status="error", progress=1.0,
-                        error=str(exc)[:500], progress_msg="失败")
+                        error=sanitize_error(exc)[:500], progress_msg="失败")
 
 
 def _sha256_of(path: Path) -> str:

@@ -33,9 +33,14 @@ _WINDOW_SECONDS = 180
 
 
 def _session_stamp() -> str:
-    """从 ADMIN_PASSWORD 派生的会话指纹：改密即全端吊销（不存明文/不存库）。"""
-    return hashlib.sha256(
-        ("doclens-session-stamp:" + settings.admin_password).encode("utf-8")
+    """会话指纹：HMAC(jwt_secret, 管理员密码派生)——改密即全端吊销（旧 token 的
+    stamp 与新值不匹配）。S4 M4-03：不用无盐快速哈希（token 泄漏可离线爆破密码），
+    用 HMAC-SHA256 以 jwt_secret 为Key（secret 不随 token 出现在载荷校验面）。"""
+    import hmac
+    return hmac.new(
+        settings.jwt_secret.encode("utf-8"),
+        ("doclens-session-stamp:" + settings.admin_password).encode("utf-8"),
+        hashlib.sha256,
     ).hexdigest()[:16]
 
 
@@ -60,7 +65,9 @@ _attempts: dict[str, deque[float]] = defaultdict(deque)
 
 
 def _rate_limit_key(ip: str, username: str) -> str:
-    return f"{ip}:{username}"
+    """S4 M4-01：key 仅用 IP——username 请求方可任意轮换（换一个即新桶=绕过爆破
+    防护）；单管理员场景 username 恒 admin，IP 维度聚合计数。"""
+    return ip
 
 
 def check_rate_limit(key: str) -> None:
