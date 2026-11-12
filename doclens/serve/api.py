@@ -209,7 +209,8 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
     @protected.get("/api/papers/tree")
     def api_papers_tree():
         from doclens import paperlib
-        return {"categories": paperlib.list_tree(), "papers": paperlib.list_papers()}
+        return {"categories": paperlib.list_tree(), "papers": paperlib.list_papers(),
+                "active_tasks": paperlib.list_active_tasks()}
 
     @protected.post("/api/papers/upload")
     def api_papers_upload(file: Annotated[UploadFile, File()],

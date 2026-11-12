@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
+import { getToken } from '../auth.js'
 
 // worker：必须在渲染 <Document> 的模块设置（B10；同一模块原则）
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -14,15 +15,19 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString()
 
-const CMAP_URL = '/pdfjs/cmaps/'
-const STD_FONTS_URL = '/pdfjs/standard_fonts/'
+const BASE = import.meta.env.BASE_URL || '/'   // 交付态=/web/（S3 M-3 残留修正）
+const CMAP_URL = `${BASE}pdfjs/cmaps/`
+const STD_FONTS_URL = `${BASE}pdfjs/standard_fonts/`
 
 export default function PdfPane({ src, onClose }) {
   const [numPages, setNumPages] = useState(0)
+  const [loadError, setLoadError] = useState(null)
   const containerRef = useRef(null)
   const pageRefs = useRef({})
 
   useEffect(() => {
+    setLoadError(null)
+    setNumPages(0)
     if (src && containerRef.current) {
       containerRef.current.scrollTo({ top: 0 })
     }
@@ -52,19 +57,24 @@ export default function PdfPane({ src, onClose }) {
   return (
     <div className="pdf-pane">
       <div className="pdf-head">
-        <span className="pdf-title">{src.doc_id} · 第 {src.page ?? '?'} 页{src.bbox ? ' · 区域高亮' : ''}</span>
+        <span className="pdf-title">{src.title || src.doc_id} · 第 {src.page ?? '?'} 页{src.bbox ? ' · 区域高亮' : ''}</span>
         <button className="btn close" onClick={onClose}>关闭</button>
       </div>
       <div className="pdf-scroll" ref={containerRef}>
         <Document
           file={url}
           onLoadSuccess={({ numPages: n }) => setNumPages(n)}
+          onLoadError={(e) => setLoadError(
+            String(e?.message || e).includes('401')
+              ? '登录已过期——请退出登录后重新进入再试'
+              : `PDF 加载失败：${String(e?.message || e).slice(0, 120)}`)}
           loading={<div className="pdf-loading">PDF 加载中…</div>}
-          error={<div className="pdf-loading">PDF 加载失败</div>}
+          error={<div className="pdf-loading">{loadError || 'PDF 加载失败'}</div>}
           options={{
             cMapUrl: CMAP_URL,
             cMapPacked: true,
             standardFontDataUrl: STD_FONTS_URL,
+            httpHeaders: { Authorization: `Bearer ${getToken()}` },  // 4.9 鉴权：pdf.js 请求带 Bearer
           }}
         >
           {Array.from({ length: numPages }, (_, i) => {

@@ -87,10 +87,10 @@ function StatusCell({ task }) {
 export default function PaperLibrary({ onOpenPaper, onAuthError }) {
   const [categories, setCategories] = useState([])
   const [papers, setPapers] = useState([])
+  const [activeTasks, setActiveTasks] = useState([])  // 进行中任务（上传后立即可见，RAGFlow 范式）
   const [activeCat, setActiveCat] = useState(null) // null=全部
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState(null)
-  const [batchIds, setBatchIds] = useState([])   // 轮询中的 batch
   const [pendingFile, setPendingFile] = useState(null)
 
   const load = useCallback(async () => {
@@ -100,6 +100,7 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
       const data = await r.json()
       setCategories(data.categories)
       setPapers(data.papers)
+      setActiveTasks(data.active_tasks || [])
     } catch (e) {
       if (e instanceof AuthError) onAuthError(e)
     }
@@ -107,25 +108,13 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
 
   useEffect(() => { load() }, [load])
 
-  // batch 轮询（2s，dify/open-webui 共同范式；全部终态即停）
+  // 轮询：只要有进行中任务或刚提交的 batch，就每 2.5s 刷新一次（全部终态即停）
+  const hasActive = activeTasks.length > 0
   useEffect(() => {
-    if (!batchIds.length) return undefined
-    const timer = setInterval(async () => {
-      let allDone = true
-      for (const b of batchIds) {
-        try {
-          const r = await authedFetch(`/api/papers/tasks/${b}`)
-          const { tasks } = await r.json()
-          if (tasks.some((t) => !['completed', 'error'].includes(t.status))) allDone = false
-        } catch { allDone = false }
-      }
-      if (allDone) {
-        setBatchIds([])
-        load()
-      }
-    }, 2000)
+    if (!hasActive) return undefined
+    const timer = setInterval(load, 2500)
     return () => clearInterval(timer)
-  }, [batchIds, load])
+  }, [hasActive, load])
 
   const doUpload = async () => {
     if (!pendingFile) return
@@ -143,8 +132,7 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
         setUploadMsg(`上传失败：${data.detail || r.status}`)
       } else {
         setUploadMsg(`已提交入库任务（${data.doc_id}），完成后立即可问答`)
-        setBatchIds((s) => [...s, data.batch_id])
-        setPendingFile(null)
+        load()   // 立即刷新：新任务出现在"进行中"区
       }
     } catch (e) {
       if (e instanceof AuthError) { onAuthError(e); return }
@@ -234,6 +222,23 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
         </div>
       </aside>
       <div className="library-main">
+        {activeTasks.length > 0 && (
+          <div className="active-tasks">
+            <div className="active-tasks-head">进行中的入库任务（{activeTasks.length}）</div>
+            {activeTasks.map((t) => (
+              <div key={t.task_id} className="active-task">
+                <span className="at-file">{t.filename}</span>
+                <span className={`badge ${t.status === 'indexing' ? 'st-running' : 'st-queued'}`}>
+                  {t.status === 'queued' ? '排队中' : t.status === 'parsing' ? '解析中' : '索引中'}
+                  {' '}{Math.round((t.progress || 0) * 100)}%
+                </span>
+                <div className="at-progress"><div className="at-bar"
+                     style={{ width: `${Math.round((t.progress || 0) * 100)}%` }} /></div>
+                <span className="at-msg">{(t.progress_msg || '').slice(0, 60)}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <table className="paper-table">
           <thead>
             <tr><th>论文</th><th>分类</th><th>分块数</th><th>状态</th><th>操作</th></tr>

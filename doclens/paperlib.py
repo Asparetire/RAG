@@ -277,6 +277,22 @@ def update_task(task_id: int, *, status: str | None = None, progress: float | No
         conn.close()
 
 
+def list_active_tasks() -> list[dict]:
+    """进行中任务（4.8 体检增补：上传后论文未进 t_doc 前也要在库里可见——RAGFlow
+    范式的"列表顶部显示 uploading/processing 状态机"）。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, batch_id, filename, status, progress, progress_msg, error, doc_id "
+                "FROM t_ingest_task WHERE status IN ('queued','parsing','indexing') ORDER BY id")
+            return [{"task_id": r[0], "batch_id": r[1], "filename": r[2], "status": r[3],
+                     "progress": r[4], "progress_msg": r[5], "error": r[6], "doc_id": r[7]}
+                    for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def get_tasks_by_batch(batch_id: str) -> list[dict]:
     conn = connect()
     try:
