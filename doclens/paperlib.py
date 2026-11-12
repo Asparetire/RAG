@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import threading
 import time
 from datetime import datetime
@@ -45,9 +46,9 @@ def _validate_name(name: str) -> str:
 
 
 def _subtree_ids(cur, cat_id: int) -> set[int]:
-    """子树 ID 集合（ancestor_ids 物化路径查询）。"""
+    """子树 ID 集合（S3 M-1 修复：JSON 列用 MEMBER OF 判断成员——IN 对 JSON 数组恒假）。"""
     cur.execute(
-        "SELECT id FROM t_category WHERE %s IN (ancestor_ids) OR id=%s",
+        "SELECT id FROM t_category WHERE CAST(%s AS JSON) MEMBER OF (ancestor_ids) OR id=%s",
         (str(cat_id), cat_id),
     )
     return {r[0] for r in cur.fetchall()}
@@ -223,7 +224,8 @@ def list_papers(user_id: str | None = None) -> list[dict]:
                 "FROM t_doc d LEFT JOIN t_category c ON c.id=d.category_id "
                 "ORDER BY d.doc_id")
             return [{"doc_id": r[0], "title": r[1] or r[0], "n_chunks": r[2],
-                     "category_id": r[3], "category_name": r[4], "status": r[4] and r[4] or r[5]}
+                     "category_id": r[3], "category_name": r[4],
+                     "status": r[5] or "completed"}
                     for r in cur.fetchall()]
     finally:
         conn.close()
@@ -320,13 +322,18 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
     """
     with _INGEST_LOCK:
         try:
-            # 1) 校验 + sha256 去重 + 落 canonical（corpus_intake 零件）
-            from scripts.corpus_intake import intake, validate_pdf  # 延迟导入防环
+            # 1) 校验 + sha256 去重 + **落 canonical**（S3 B-1：必须显式复制到
+            #    data/pdfs/{doc_id}.pdf——PDF 预览与重试链路都依赖它；intake() 是
+            #    批处理入口不适用于单篇路径）
+            from scripts.corpus_intake import validate_pdf  # 延迟导入防环
             err = validate_pdf(pdf_path)
             if err:
                 raise ValueError(err)
             digest = _sha256_of(pdf_path)
             doc_id = digest[:12]
+            canonical = DATA_DIR / "pdfs" / f"{doc_id}.pdf"
+            canonical.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(pdf_path, canonical)
             update_task(task_id, doc_id=doc_id, status="parsing", progress=0.05,
                         progress_msg="校验通过，开始解析")
             # 去重：t_doc 已有同 doc_id → 直接归档跳过解析

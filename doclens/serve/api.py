@@ -29,15 +29,15 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
-import shutil
 import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sse_starlette.sse import EventSourceResponse
@@ -71,6 +71,11 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
     app = FastAPI(title="DocLens", version="0.4.0")
     app.state.pipeline = pipeline or run_pipeline
     _auth_on = settings.auth_enabled if auth_enabled is None else auth_enabled
+    if _auth_on and (not settings.admin_password or not settings.jwt_secret):
+        # S3 M-4：空凭据 fail-fast——空密码可登录、空 secret 可伪造 token
+        raise RuntimeError(
+            "M4 登录门缺少凭据：请在 .env 配置 ADMIN_PASSWORD 与 JWT_SECRET"
+            "（随机生成，绝不入库），或显式传 auth_enabled=False（仅限测试）")
 
     protected = APIRouter(dependencies=[Depends(auth.get_current_user)] if _auth_on else [])
 
@@ -78,8 +83,11 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
     if _auth_on:
 
         @app.post("/api/auth/login")
-        def api_login(form: Annotated[OAuth2PasswordRequestForm, Depends()]):
-            token = auth.try_login(form.password, username=form.username)
+        def api_login(request: Request,
+                      form: Annotated[OAuth2PasswordRequestForm, Depends()]):
+            # S3 m-2：限流 key 带真实来源（否则全局共享一个 key，错 5 次锁死管理员）
+            ip = request.client.host if request.client else "unknown"
+            token = auth.try_login(form.password, ip=ip, username=form.username)
             return {"access_token": token, "token_type": "bearer"}
 
         @protected.get("/api/auth/me")
@@ -181,6 +189,18 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
 
     app.include_router(protected)
 
+    # ---- S3 M-5：启动扫描兜底（接线）——重启后超阈值的 queued/parsing/indexing
+    # 任务标 failed（open-webui/dify 同款思路），防止永久悬挂。
+    if _auth_on or True:  # 无条件执行（扫描是幂等的，且不依赖鉴权）
+        from doclens import paperlib
+        try:
+            swept = paperlib.sweep_stale_tasks()
+            if swept:
+                logging.getLogger("uvicorn.error").warning(
+                    "启动扫描：%d 个超时任务标记为 failed", swept)
+        except Exception:  # noqa: BLE001 扫描失败不阻塞启动（表未建等场景）
+            logging.getLogger("uvicorn.error").exception("启动扫描失败")
+
     # ---- 存活探针（公开组）----
     @app.get("/api/health")
     def api_health() -> dict:
@@ -193,8 +213,13 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         return {"categories": paperlib.list_tree(), "papers": paperlib.list_papers()}
 
     @protected.post("/api/papers/upload")
-    def api_papers_upload(file: Annotated[UploadFile, File()], category_id: int | None = None):
-        """multipart 上传：同步校验+落盘+建任务（快返回），解析入库在后台线程。"""
+    def api_papers_upload(file: Annotated[UploadFile, File()],
+                          category_id: Annotated[int | None, Form()] = None):
+        """multipart 上传：同步校验+落盘+建任务（快返回），解析入库在后台线程。
+
+        S3 M-2：category_id 必须 Form() 标注——否则 FastAPI 归为 query 参数，
+        前端 FormData 字段被静默忽略（"上传到当前分类"失效）。
+        """
         from doclens import paperlib
         contents = file.file.read()
         err = paperlib.validate_upload(file.filename or "", len(contents))

@@ -49,7 +49,8 @@ export default function ChatPane({ messages, status, onAsk, onStop, onCiteClick,
           disabled={status === 'streaming'}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // S3 m-6：中文输入法选词回车不发送（isComposing）
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               submit()
             }

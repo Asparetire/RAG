@@ -6,6 +6,7 @@ import { viteStaticCopy } from 'vite-plugin-static-copy'
 // http-proxy 透传流式响应（无缓冲），交付期 npm run build 产 dist 入库走 FastAPI 托管。
 // cMaps/standard_fonts：中文 PDF 必需（财报泛化包），英文语料一并配好（B10 细则）。
 export default defineConfig({
+  base: '/web/', // S3 M-3：SPA 挂 /web 前缀，资源必须相对该前缀（否则交付态全 404）
   plugins: [
     react(),
     viteStaticCopy({
