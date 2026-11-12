@@ -19,11 +19,15 @@ import time
 from collections import defaultdict, deque
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from pwdlib import PasswordHash
 
 from doclens.config import settings
+
+COOKIE_NAME = "doclens_token"   # 双通道鉴权（调研 §10 [G9] open-webui 同款）：iframe/
+                                # pdf.js 等浏览器原生请求不带 Authorization，走 httpOnly cookie
+COOKIE_MAX_AGE = 7 * 24 * 3600
 
 _pwd_hasher = PasswordHash.recommended()  # argon2id（pwdlib 默认推荐）
 
@@ -119,8 +123,14 @@ def decode_token(token: str) -> dict:
     return payload
 
 
-def get_current_user(token: str | None = Depends(_oauth2_scheme)) -> dict:
-    """全路由一把门（Depends 注入；user 概念为 L1 预埋形态）。"""
+def get_current_user(request: Request, token: str | None = Depends(_oauth2_scheme)) -> dict:
+    """全路由一把门（Depends 注入；user 概念为 L1 预埋形态）。
+
+    双通道：Authorization Bearer（fetch/XHR）或 httpOnly cookie（iframe/pdf.js 等
+    浏览器原生请求，如论文库的 iframe 原文预览——4.8 体检）。
+    """
+    if not token:
+        token = request.cookies.get(COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="未登录或登录已过期")
     payload = decode_token(token)

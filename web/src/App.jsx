@@ -6,6 +6,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { askQuestion, fetchModels } from './api.js'
 import { getToken, clearToken, AuthError } from './auth.js'
+
+// 4.8 体检：登出需清 httpOnly cookie（走后端 /api/auth/logout），localStorage token 一并清
+async function doLogout() {
+  try { await fetch('/api/auth/logout', { method: 'POST' }) } catch { /* 尽力而为 */ }
+  clearToken()
+}
 import ChatPane from './components/ChatPane.jsx'
 import SourceSidebar from './components/SourceSidebar.jsx'
 import PdfPane from './components/PdfPane.jsx'
@@ -225,7 +231,7 @@ export default function App() {
           </div>
           <button className="btn close" onClick={() => dispatch({ type: 'clear' })}
                   disabled={status === 'streaming'}>清空对话</button>
-          <button className="btn close" onClick={() => { clearToken(); setLoggedIn(false) }}>退出登录</button>
+          <button className="btn close" onClick={() => { doLogout(); setLoggedIn(false) }}>退出登录</button>
           <label className="profile-pick">
             检索档位
             <select value={profile} disabled={status === 'streaming'}
@@ -265,10 +271,17 @@ export default function App() {
           <PdfPane src={activeSource} onClose={() => setActiveSource(null)} />
         )}
         {view === 'library' && libraryPaper && (
-          <PdfPane
-            src={{ doc_id: libraryPaper.doc_id, page: 1, bbox: null, title: libraryPaper.title }}
-            onClose={() => setLibraryPaper(null)}
-          />
+          <div className="pdf-pane">
+            <div className="pdf-head">
+              <span className="pdf-title">{libraryPaper.title} · 原文预览（浏览器原生渲染）</span>
+              <button className="btn close" onClick={() => setLibraryPaper(null)}>关闭</button>
+            </div>
+            <iframe
+              className="pdf-frame"
+              title={libraryPaper.title}
+              src={`/api/docs/${libraryPaper.doc_id}/pdf#page=1&view=FitH`}
+            />
+          </div>
         )}
       </div>
     </div>

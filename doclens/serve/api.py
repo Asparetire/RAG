@@ -37,7 +37,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sse_starlette.sse import EventSourceResponse
@@ -82,12 +82,22 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
     if _auth_on:
 
         @app.post("/api/auth/login")
-        def api_login(request: Request,
+        def api_login(request: Request, response: Response,
                       form: Annotated[OAuth2PasswordRequestForm, Depends()]):
             # S3 m-2：限流 key 带真实来源（否则全局共享一个 key，错 5 次锁死管理员）
             ip = request.client.host if request.client else "unknown"
             token = auth.try_login(form.password, ip=ip, username=form.username)
+            # 双通道：Bearer（fetch 用）+ httpOnly cookie（iframe/pdf.js 等原生请求用）
+            response.set_cookie(
+                auth.COOKIE_NAME, token, max_age=auth.COOKIE_MAX_AGE,
+                httponly=True, samesite="lax", path="/")
             return {"access_token": token, "token_type": "bearer"}
+
+        @app.post("/api/auth/logout")
+        def api_logout(response: Response):
+            """登出=清 cookie（公开端点：token 过期也应能清）。"""
+            response.delete_cookie(auth.COOKIE_NAME, path="/")
+            return {"ok": True}
 
         @protected.get("/api/auth/me")
         def api_me(user: dict = Depends(auth.get_current_user)):
