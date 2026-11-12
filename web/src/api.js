@@ -1,25 +1,32 @@
 // m4-runbook K3：SSE 消费层——@microsoft/fetch-event-source（POST+JSON body，事件回调）。
 // openWhenHidden=true：切走标签页不断流（演示场景保险）。
 // 备选方案（未采用）：eventsource-parser + 手写 fetch 分帧（RAGFlow/OpenWebUI 同款）。
+// 4.9：请求带 Authorization header；401 → AuthError（App 捕获后切登录页）。
 import { fetchEventSource } from '@microsoft/fetch-event-source'
+import { getToken, clearToken, AuthError } from './auth.js'
 
 /**
  * 发起一次流式问答。
  * @param {string} question
  * @param {string} profile "A".."F"
+ * @param {string|null} model 模型覆盖位（K12；null=默认）
  * @param {(payload: {event: string, data: object}) => void} onEvent 每个契约事件回调一次
- * @param {(err: Error) => void} onError 致命错误（网络/非 2xx）
+ * @param {(err: Error) => void} onError 致命错误（网络/非 2xx/401）
  * @returns {() => void} abort 函数（中断本次流）
  */
-export function askQuestion(question, profile, onEvent, onError) {
+export function askQuestion(question, profile, model, onEvent, onError) {
   const ctrl = new AbortController()
   fetchEventSource('/api/query', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ question, profile }),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+    body: JSON.stringify({ question, profile, model: model || undefined }),
     signal: ctrl.signal,
     openWhenHidden: true,
     async onopen(resp) {
+      if (resp.status === 401) {
+        clearToken()
+        throw new AuthError('登录已过期，请重新登录')
+      }
       if (!resp.ok) {
         let detail = `HTTP ${resp.status}`
         try {
@@ -44,4 +51,11 @@ export function askQuestion(question, profile, onEvent, onError) {
     onError(err instanceof Error ? err : new Error(String(err)))
   })
   return () => ctrl.abort()
+}
+
+/** 拉取模型清单（K12）：{models:[{id,label,vision,thinking}], default, rerank_tiers}。 */
+export async function fetchModels() {
+  const resp = await authedFetch('/api/models')
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+  return resp.json()
 }

@@ -17,3 +17,6 @@ pillow==13.0.0              # 图像降采样/探针
 fastapi==0.162.2            # M4 服务用（D9），M0 一并锁版
 uvicorn[standard]==0.54.0
 sse-starlette==3.7.0        # SSE 流式
+pwdlib[argon2]==0.3.1       # M4 登录门：密码哈希（FastAPI 官方教程范式，G15）
+PyJWT==2.15.1               # M4 登录门：JWT 签发/校验（HS256）
+python-multipart==0.0.33    # M4 论文库：multipart 上传解析

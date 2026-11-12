@@ -23,7 +23,7 @@ import asyncio
 import time
 from pathlib import Path
 
-from doclens.config import PARSED_DIR, PROJECT_ROOT, PROFILES, settings
+from doclens.config import AVAILABLE_GEN_MODELS, PARSED_DIR, PROJECT_ROOT, PROFILES, settings
 from doclens.generate import citations as CITE
 from doclens.generate import fallback as FB
 from doclens.generate.context import assemble
@@ -139,9 +139,16 @@ async def run_pipeline(
     rerank_pro: bool = False,
     trace_on: bool = True,
     stream_gen: bool = False,
+    model: str | None = None,
 ) -> dict:
-    """端到端一问（管道序 = m3-runbook §3 K1–K7；M3 行为全保留 + 事件出口）。"""
+    """端到端一问（管道序 = m3-runbook §3 K1–K7；M3 行为全保留 + 事件出口）。
+
+    model：K12 模型覆盖位（生成模型；None=settings.gen_model）。服务端白名单校验
+    （api 层已校验，此处双保险回退默认——前端不可信，调研 §11.2③）。
+    """
     profile = PROFILES[profile_name]
+    gen_model = model if (model and any(m["id"] == model for m in AVAILABLE_GEN_MODELS)) \
+        else settings.gen_model
     qid = TR.query_id(question, profile_name)
     t0 = time.perf_counter()
     timings: dict[str, float] = {}
@@ -258,7 +265,8 @@ async def run_pipeline(
             return await generate_answer(
                 question, ctx, image_blobs=blobs or None,
                 stream=stream_gen, max_tokens=mt,
-                on_delta=_on_delta if stream_gen else None)
+                on_delta=_on_delta if stream_gen else None,
+                model=gen_model)
 
         gen, empty_content = await _generate_with_guard(_gen_call)
         answer = gen.answer
@@ -334,7 +342,7 @@ async def run_pipeline(
     _emit(on_event, "done", finish_reason=finish_reason,
           usage={"total_tokens": gen.usage_tokens if gen else None,
                  "prompt_tokens": gen.prompt_tokens if gen else None},
-          timing=timings, trace_id=qid)
+          timing=timings, trace_id=qid, model=gen_model)
 
     return {"query_id": qid, "profile": profile_name, "lang": lang, "question": question,
             "answer": answer, "refused": bool(decision.refused or empty_content),

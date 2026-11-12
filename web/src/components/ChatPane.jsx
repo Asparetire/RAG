@@ -1,8 +1,11 @@
-// 对话区：消息列表 + 输入框（Enter 发送 / Shift+Enter 换行）+ 流式停止按钮。
+// 对话区：消息列表 + 输入框（Enter 发送 / Shift+Enter 换行）+ 流式停止按钮
+// + 模型选择器（K12/4.10，输入框工具栏位；ai-chatbot 惯例）。
 import { useEffect, useRef, useState } from 'react'
 import Message from './Message.jsx'
+import ModelSelector from './ModelSelector.jsx'
 
-export default function ChatPane({ messages, status, onAsk, onStop, onCiteClick, onMsgDone }) {
+export default function ChatPane({ messages, status, onAsk, onStop, onCiteClick, onMsgDone,
+                                   modelsInfo, selectedModel, onSelectModel }) {
   const [draft, setDraft] = useState('')
   const listRef = useRef(null)
 
@@ -52,9 +55,14 @@ export default function ChatPane({ messages, status, onAsk, onStop, onCiteClick,
             }
           }}
         />
-        {status === 'streaming'
-          ? <button className="btn stop" onClick={onStop}>停止</button>
-          : <button className="btn send" onClick={submit} disabled={!draft.trim()}>发送</button>}
+        <div className="composer-side">
+          <ModelSelector modelsInfo={modelsInfo} selected={selectedModel} onSelect={onSelectModel} />
+          <div className="composer-buttons">
+            {status === 'streaming'
+              ? <button className="btn stop" onClick={onStop}>停止</button>
+              : <button className="btn send" onClick={submit} disabled={!draft.trim()}>发送</button>}
+          </div>
+        </div>
       </div>
     </section>
   )

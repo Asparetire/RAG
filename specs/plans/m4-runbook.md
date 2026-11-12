@@ -84,7 +84,10 @@
 | 4.5 | **检索可视化**：ScorePanel（sources.routes 并列分数+融合/重排序标记）（K6） | 手工清单⑤完整过（含分数并列） | 4.3 |
 | 4.6 | **集成验收**：手工清单 5 项全过+≤20s 计时（R6 协议）+安全五条检视+降级开关实测 | §1 验收表全过 | 4.4/4.5 |
 | 4.7 | **交付形态**：npm run build → dist 入库 → push server → 容器托管 → 隧道浏览器验证 + 演示日 checklist 演练 | 单命令+隧道全流程通；dist 在容器可服务 | 4.6 |
-| 4.8 | （可选 P1）Gradio mount /gradio | 可用即可 | 4.6 |
+| 4.8 | **论文库（v2 方案，调研 §9）**：t_category（FastGPT 式树：自引用+ancestor_ids+环检测+层级上限）+t_ingest_task（dify 式状态机 queued/parsing/indexing/completed/error+chunk 计数+error 文本+batch 聚合号）+t_doc.category_id/可空 user_id 预埋；upload/tree/task/categories CRUD API（上传口同步校验大小/扩展名）；入库管线单篇化（mineru-kit 桥接+ingest 抽函数）；启动扫描兜底；前端：顶栏对话/论文库视图切换+分类树+论文表格（RAGFlow 式状态徽标/进度条/重试/日志）+上传+点击论文复用 PdfPane | 上传→自动入库→立即可问全链路通；树 CRUD 通；穿越/越权单测绿 | 4.6 |
+| 4.9 | **登录门 L0（调研 §10）**：单管理员 argon2（pwdlib）+JWT HS256（FastAPI 官方范式）；POST /api/auth/login+get_current_user Depends 全路由一把门（/api/health、/web、登录本身除外）；所有新表预埋可空 user_id；前端登录页+token 存储+401 跳登录 | 未登录访问 /api/query→401；登录后全功能可用；弱密码/限流单测 | 4.6 |
+| 4.10 | **模型反馈+切换（调研 §11）**：GET /api/models（config 白名单+vision/thinking 能力标记+当前默认）；query body 加 model 覆盖位（服务端白名单校验+非法回退默认）；选择器入输入框工具栏（ai-chatbot 范式）+cookie 持久化默认+答案 meta 显示所用模型 | 模型切换即时生效；非法模型回退单测绿；缓存按模型隔离验证 | 4.9 |
+| 4.8a | （可选 P1）Gradio mount /gradio | 可用即可 | 4.6 |
 | 收尾 | CHANGELOG + tag m4 + 主计划补记（§9 命令/文件树/assets 职责）+ S3 审查 + S4 安全复查（强制） | 双端同步 | 4.7 |
 
 ## 6. 测试策略（普通实现，延续 M2/M3 决策）
@@ -140,3 +143,4 @@ git add web/dist; git commit; git push server master
 - 批准时间：2026-11-12 13:33 (+08:00)
 - 批准指令原文：「可以 开工吧」
 - TDD：否（普通实现，延续 M2/M3 决策；质量保障走 S3 代码审查 + S4 安全复查 + 契约测试 + 手工验收清单）
+- **增补批准（2026-11-12 19:30 前后）**：指令「123都做 保证质量」——三合一确认单（①论文库 v2=4.8、②登录门 L0=4.9、③模型反馈切换=4.10）全做；执行序=4.9→4.10→4.8（先立门避免返工）；B 决策点=初始 11 篇挂"未分类"；管理员密码=随机生成入 .env 不入库

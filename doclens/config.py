@@ -105,6 +105,23 @@ class Settings(BaseSettings):
     # --- 服务（M4）：SPA 托管显式开关（交付形态；dev 期保持关，/api 不受干扰） ---
     web_static: bool = False
 
+    # --- 登录门（M4/4.9）：单管理员 + JWT；密码/密钥随机生成入 .env，绝不入库 ---
+    admin_password: str = ""
+    jwt_secret: str = ""
+    auth_enabled: bool = True   # 契约测试等场景可关（代码级开关，不入 .env 惯例）
+
+
+# ---------- 可选模型白名单（m4-runbook K12；调研 §11：单供应商多模型场景=白名单入 config） ----------
+# 方舟 Coding Plan 支持的第三方模型（AGENTS 记录口径）；能力标记服务前端分档展示。
+# 改动面：新增/下架模型只动这里（/api/models 自动跟随；服务端白名单校验兜底回退默认）。
+AVAILABLE_GEN_MODELS: list[dict] = [
+    {"id": "glm-5.3-flash", "label": "GLM 5.3 Flash", "vision": True, "thinking": True},
+    {"id": "kimi-k3", "label": "Kimi K3", "vision": False, "thinking": True},
+    {"id": "deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "vision": False, "thinking": True},
+]
+
+MODELS: dict[str, list[dict]] = {"gen": AVAILABLE_GEN_MODELS}
+
 
 settings = Settings()
 

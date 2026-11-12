@@ -14,6 +14,7 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
+from doclens.serve import auth
 from doclens.serve.api import create_app
 
 
@@ -38,7 +39,8 @@ async def _happy_pipeline(question, profile_name, *, on_event=None, **kw):
     ev("thinking", status="done", elapsed_ms=123.4)
     ev("citations", cited=[1], invalid=[])
     ev("done", finish_reason="stop", usage={"total_tokens": 10, "prompt_tokens": 5},
-       timing={"retrieve_ms": 1.0}, trace_id="20260101000000-D-0000000000")
+       timing={"retrieve_ms": 1.0}, trace_id="20260101000000-D-0000000000",
+       model="glm-5.3-flash")
     return {"query_id": "20260101000000-D-0000000000", "answer": "答案 [1]"}
 
 
@@ -68,13 +70,13 @@ def _parse_sse(lines):
 
 @pytest.fixture()
 def happy_client():
-    app = create_app(pipeline=_happy_pipeline)
+    app = create_app(pipeline=_happy_pipeline, auth_enabled=False)
     return TestClient(app)
 
 
 @pytest.fixture()
 def boom_client():
-    app = create_app(pipeline=_boom_pipeline)
+    app = create_app(pipeline=_boom_pipeline, auth_enabled=False)
     return TestClient(app)
 
 
@@ -106,11 +108,11 @@ def test_contract_event_order_and_schema(happy_client):
     # token 只透传 content
     assert all(set(t.keys()) == {"content"} for t in by_name["token"])
 
-    # done 收尾：finish_reason/usage/timing/trace_id
+    # done 收尾：finish_reason/usage/timing/trace_id/model（K12）
     done = by_name["done"][0]
     assert done["finish_reason"] == "stop"
     assert done["usage"]["total_tokens"] == 10
-    assert set(done.keys()) == {"finish_reason", "usage", "timing", "trace_id"}
+    assert set(done.keys()) == {"finish_reason", "usage", "timing", "trace_id", "model"}
 
 
 def test_contract_error_event_sanitized(boom_client):
@@ -133,5 +135,53 @@ def test_query_validation(happy_client):
     assert r.status_code == 422
 
 
+def test_query_model_whitelist(happy_client):
+    """K12：model 覆盖位服务端白名单校验（前端不可信）。"""
+    from doclens.config import AVAILABLE_GEN_MODELS
+    ok_id = AVAILABLE_GEN_MODELS[0]["id"]
+    with happy_client.stream("POST", "/api/query",
+                             json={"question": "x", "model": ok_id}) as resp:
+        assert resp.status_code == 200
+    r = happy_client.post("/api/query", json={"question": "x", "model": "jailbreak-model"})
+    assert r.status_code == 422
+
+
 def test_health(happy_client):
     assert happy_client.get("/api/health").json() == {"ok": True}
+
+
+def test_auth_gate_blocks_unauthenticated(monkeypatch):
+    """K11：鉴权开时 /api/* 受保护（health/login 豁免）+ 登录后放行。"""
+    monkeypatch.setattr(auth.settings, "admin_password", "test-admin-pw")
+    monkeypatch.setattr(auth, "_admin_hash_cache", None)
+    app = create_app(pipeline=_happy_pipeline)  # 默认 auth_enabled
+    client = TestClient(app)
+    assert client.get("/api/health").json() == {"ok": True}          # 豁免
+    assert client.get("/api/models").status_code == 401              # 受保护 → 401
+    assert client.post("/api/query", json={"question": "x"}).status_code == 401
+    r = client.post("/api/auth/login",
+                    data={"username": "admin", "password": "test-admin-pw"})
+    assert r.status_code == 200
+    token = r.json()["access_token"]
+    assert client.get("/api/models",
+                      headers={"Authorization": f"Bearer {token}"}).status_code == 200
+    auth.reset_attempts("testclient:admin")
+
+
+def test_auth_disabled_bypasses(monkeypatch):
+    """auth_enabled=False：路由结构不变，门不挂（契约测试同款形态）。"""
+    monkeypatch.setattr(auth.settings, "admin_password", "x")
+    monkeypatch.setattr(auth, "_admin_hash_cache", None)
+    app = create_app(pipeline=_happy_pipeline, auth_enabled=False)
+    client = TestClient(app)
+    assert client.get("/api/models").status_code == 200
+    assert client.post("/api/auth/login").status_code in (404, 405)  # 登录端点不存在
+
+
+def test_models_endpoint(happy_client):
+    r = happy_client.get("/api/models")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["default"]
+    assert all({"id", "label", "vision", "thinking"} <= set(m) for m in body["models"])
+    assert {t["id"] for t in body["rerank_tiers"]} == {"flash", "pro"}

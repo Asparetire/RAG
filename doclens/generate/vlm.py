@@ -80,6 +80,7 @@ async def generate_answer(
     max_tokens: int = 2048,
     timeout: float = 120.0,
     on_delta=None,
+    model: str | None = None,
 ) -> GenResult:
     """调 gen_model（glm-5.3-flash）生成带引用的答案。
 
@@ -87,7 +88,8 @@ async def generate_answer(
     image_blobs：image_path → 原图 bytes（读取归调用方；缺文件的图跳过不附）。
     on_delta：M4 流式事件钩子（仅 stream=True 时生效），签名 cb(kind, text)，
       kind ∈ ("reasoning", "content")——reasoning 只进该钩子（R5 双字段分流），
-      绝不混入 answer。异常不在此吞——调用方决定重试/降级。
+      绝不混入 answer。model：K12 覆盖位（None=settings.gen_model）。
+    异常不在此吞——调用方决定重试/降级。
     """
     if question and question != ctx.question:
         ctx = dataclasses.replace(ctx, question=question)
@@ -100,7 +102,7 @@ async def generate_answer(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": to_prompt_parts(ctx, image_urls=urls)},
     ]
-    model = settings.gen_model
+    model = model or settings.gen_model  # K12 覆盖位（None=默认）
     client = AsyncOpenAI(api_key=settings.ark_api_key, base_url=settings.ark_base_url)
     t0 = time.perf_counter()
 

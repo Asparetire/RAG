@@ -55,7 +55,7 @@ export default function Message({ msg, onCiteClick, onDone }) {
       )}
       {msg.done && msg.traceId && (
         <div className="msg-meta">
-          trace {msg.traceId}
+          模型 {msg.model || '默认'} · trace {msg.traceId}
           {msg.usage && msg.usage.total_tokens != null ? ` · ${msg.usage.total_tokens} tokens` : ''}
         </div>
       )}
