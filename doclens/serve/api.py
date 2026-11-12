@@ -30,14 +30,19 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import shutil
+import threading
+import time
+import uuid
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sse_starlette.sse import EventSourceResponse
 
-from doclens.config import MODELS, PROJECT_ROOT, PROFILES, settings
+from doclens.config import DATA_DIR, MODELS, PROJECT_ROOT, PROFILES, settings
 from doclens.pipeline import run_pipeline
 from doclens.serve import auth
 from doclens.serve.assets import resolve_figure, resolve_pdf
@@ -180,6 +185,121 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
     @app.get("/api/health")
     def api_health() -> dict:
         return {"ok": True}
+
+    # ---- 论文库（4.8；调研 §9 范式）----
+    @protected.get("/api/papers/tree")
+    def api_papers_tree():
+        from doclens import paperlib
+        return {"categories": paperlib.list_tree(), "papers": paperlib.list_papers()}
+
+    @protected.post("/api/papers/upload")
+    def api_papers_upload(file: Annotated[bytes, File()], category_id: int | None = None):
+        """multipart 上传：同步校验+落盘+建任务（快返回），解析入库在后台线程。"""
+        from doclens import paperlib
+        err = paperlib.validate_upload(file.filename or "", len(file.file.read()))
+        file.file.seek(0)
+        if err:
+            raise HTTPException(status_code=422, detail=err)
+        # sha256 去重前置检查（文件级，秒回常见重复）
+        import hashlib
+        digest = hashlib.sha256()
+        while chunk := file.file.read(1 << 20):
+            digest.update(chunk)
+        file.file.seek(0)
+        doc_id = digest.hexdigest()[:12]
+        from doclens.index.db import connect
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM t_doc WHERE doc_id=%s", (doc_id,))
+                dup = cur.fetchone()[0]
+        finally:
+            conn.close()
+        if dup:
+            raise HTTPException(status_code=409, detail=f"与已入库论文 {doc_id} 内容相同（sha256 重复）")
+
+        batch_id = uuid.uuid4().hex
+        inbox = DATA_DIR / "pdfs_inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        dest = inbox / f"{doc_id}_{int(time.time())}_{file.filename}"
+        with dest.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        cat_id = category_id or paperlib.ensure_default_category()
+        task_id = paperlib.create_task(file.filename, cat_id, batch_id)
+        threading.Thread(target=paperlib._run_ingest, args=(task_id, dest, cat_id),
+                         daemon=True, name=f"ingest-{task_id}").start()
+        return {"batch_id": batch_id, "task_id": task_id, "doc_id": doc_id}
+
+    @protected.get("/api/papers/tasks/{batch_id}")
+    def api_papers_tasks(batch_id: str):
+        from doclens import paperlib
+        return {"tasks": paperlib.get_tasks_by_batch(batch_id)}
+
+    @protected.post("/api/papers/tasks/{task_id}/retry")
+    def api_papers_retry(task_id: int):
+        from doclens import paperlib
+        # 重试=重建一个任务行，复用原 inbox 文件（RAGFlow 重解析范式）
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT filename, category_id, doc_id FROM t_ingest_task WHERE id=%s",
+                            (task_id,))
+                row = cur.fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            raise HTTPException(status_code=404, detail="task not found")
+        filename, cat_id, doc_id = row
+        if not doc_id:
+            raise HTTPException(status_code=422, detail="任务未生成 doc_id，无法重试")
+        pdf_path = DATA_DIR / "pdfs" / f"{doc_id}.pdf"
+        if not pdf_path.exists():
+            raise HTTPException(status_code=422, detail="canonical PDF 不存在")
+        batch_id = uuid.uuid4().hex
+        new_task = paperlib.create_task(f"{filename}（重试）", cat_id, batch_id)
+        threading.Thread(target=paperlib._run_ingest, args=(new_task, pdf_path, cat_id),
+                         daemon=True, name=f"ingest-{new_task}").start()
+        return {"batch_id": batch_id, "task_id": new_task}
+
+    # ---- 分类 CRUD（树管理；移动/删除带环检测与约束）----
+    @protected.post("/api/categories")
+    def api_category_create(body: dict):
+        from doclens import paperlib
+        try:
+            return paperlib.create_category(body.get("name"), body.get("parent_id"))
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    @protected.patch("/api/categories/{cat_id}")
+    def api_category_update(cat_id: int, body: dict):
+        from doclens import paperlib
+        try:
+            if "name" in body:
+                paperlib.rename_category(cat_id, body["name"])
+            if "parent_id" in body:
+                paperlib.move_category(cat_id, body["parent_id"])
+            return {"ok": True}
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    @protected.delete("/api/categories/{cat_id}")
+    def api_category_delete(cat_id: int):
+        from doclens import paperlib
+        try:
+            paperlib.delete_category(cat_id)
+            return {"ok": True}
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    @protected.patch("/api/papers/{doc_id}/category")
+    def api_paper_move(doc_id: str, body: dict):
+        from doclens import paperlib
+        try:
+            paperlib.assign_category(doc_id, body.get("category_id"))
+            return {"ok": True}
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
 
     # ---- SPA 托管（交付形态，K2/R1）：显式开关 WEB_STATIC=1 才挂（dev 期 dist 存在
     # 也不干扰 /api）；fastapi>=0.162 官方 frontend()，fallback=auto 即 history fallback
