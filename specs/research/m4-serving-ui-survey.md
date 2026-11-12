@@ -1,6 +1,6 @@
 # DocLens M4 服务+UI·规划审查与同类项目调研笔记
 
-> 状态：**v1.2（已核实为主）**——2026-11-11 立稿（v1.0：P/G/R 审查+A/B 两线调研）；**2026-11-12 增补 §7 高分项目横评（C 线）、§8 交互与协议深挖（D 线）、§9 论文库调研（E/F 线）**。审查结论为本会话实测核实（SSH 探针/源码/数据）；A/B/C/D/E/F 六条调研线由研究代理并行完成，web_search 全程 HTTP 402 不可用，全部经 ghfast.top/ungh.cc 代理直抓官方文档与源码核实；未能核实项在 §5 列明。
+> 状态：**v1.3（已核实为主）**——2026-11-11 立稿（v1.0：P/G/R 审查+A/B 两线调研）；**2026-11-12 增补 §7 高分项目横评（C 线）、§8 交互与协议深挖（D 线）、§9 论文库调研（E/F 线）、§10 多用户调研（G/H 线）**。审查结论为本会话实测核实（SSH 探针/源码/数据）；A–H 八条调研线由研究代理并行完成，web_search 全程 HTTP 402 不可用，全部经 ghfast.top/ungh.cc/qdrant.tech 代理直抓官方文档与源码核实；未能核实项在 §5 列明。
 > 用途：主计划 M4 节（`doclens-multimodal-rag.plan.md` §5 M4）的问题审查 + [m4-runbook](../plans/)（**待立项**）的方案佐证与修订输入，随 G1 确认门一并过目。
 > **配套演示**：[m4-ui-mockup.html](m4-ui-mockup.html)——单文件交互原型（无后端、无构建，浏览器直接打开）：演示 §1.4 契约的完整时序（阶段条 → sources 先于首 token → 思考折叠面板 → 流式正文+可点击引用 → bbox 百分比高亮 → citations/done），含图表题/表格题/不可回答题三个剧本（bbox 抄自真实 doc.json 探针值）；M4 runbook 立项时可直接作前端布局蓝本。
 > 与 [m3-retrieval-generation-survey](m3-retrieval-generation-survey.md) 强关联：M4 的 SSE 契约直接消费 M3 调研 R9（思考流）/R11（引用编号语义）/R15（trace 字段），本文不重复引用其原文，只标"m3 调研 R#"。
@@ -303,6 +303,42 @@ event: error      data: {"code":"...","message":"...（脱敏）"}
 | F 线 | [F1][F2] open-webui models/folders.py+routers/folders.py（parent_id/环检测/展开持久化）；[F3][F4] anything-llm prisma schema+workspace.js（平铺/slug）；[F5][F6] dify datasets 列表页两版（卡片网格/enable_knowledge_fs）；[F7] dify api/models/dataset.py（无分组字段/状态机）；[F8] FastGPT dataset/schema.ts（parentId+ancestorIds+type+maxFolderDepth）；[F9][F10] open-webui Knowledge.svelte+KnowledgeBase.svelte（列表徽标/库内目录树/上传状态机）；[F11] ragflow datasets 列表页；[F12]–[F14] ragflow use-dataset-table-columns/parsing-status-cell/reparse-dialog+process-log-modal（七态+进度条+取消/重解析）；[F15] FastGPT dataset/list/index.tsx（下钻/面包屑/文件夹侧卡/批量移动） |
 
 > 〔未核实〕FastGPT 队列消费器循环、AnythingLLM 前端侧栏形态、Dify/RAGFlow 上传控件视觉形态、message_end metadata 细节等——均不影响结论。
+
+## 10. 多用户调研（G/H 线，2026-11-12——「能不能现在加入多用户」专项）
+
+> 对象：open-webui/anything-llm/dify/MaxKB/FastGPT/RAGFlow 的账号会话权限模型（G 线）+ 数据隔离与向量库多租户（H 线，含 Qdrant 官方文档）。
+
+### 10.1 G 线：账号/会话/权限 [G1]–[G15]
+
+- **注册/开通**：open-webui=开放注册+**首注册用户自动 admin 且自动关注册**（先插后查防并发）+后续用户 pending 待审；anything-llm=无开放注册（管理员建用户/邀请制 invites 表）；dify=一次性 setup 页初始化 admin+成员邀请；MaxKB=社区版代码级硬限 2 用户（反面教材）。
+- **密码**：open-webui argon2/bcrypt 可配；anything-llm bcrypt cost10+joi 强度校验；**MaxKB MD5 无盐=明确反面教材**；FastAPI 官方范式=pwdlib[argon2]+PyJWT HS256 [G15]——可直接照抄。
+- **会话**：四家全 JWT+Bearer；open-webui 加分细节=HS256 载荷含 session_stamp 服务端比对（**改密全端吊销**）+登录限流 5 次/3min+未知用户假哈希防时序探测；dify=access+refresh+csrf 三 cookie；API key 与 UI 会话并存（open-webui sk- 前缀分支识别）。
+- **角色**：anything-llm admin/manager/default+**flex/strict 双中间件**（单/多用户共用路由自动放行）；open-webui admin/user/pending+FastAPI Depends 链（get_current_user→get_verified_user→get_admin_user）；dify 新版可自定义 RBAC。
+- **★多用户开关（anything-llm，平滑升级的关键实现）**：开关存 DB（system_settings 表）；**所有业务表带可空 user_id——单用户时全 NULL，开启多用户时批量回填给 admin+轮换 JWT_SECRET+失败整体回滚**。这就是"单→多用户零迁移升级"的实现。
+
+### 10.2 H 线：数据隔离与向量库多租户 [H1]–[H9]
+
+- **隔离字段两大流派**：子表冗余到底（Dify 三层全 tenant_id+复合索引；FastGPT teamId 打头复合索引，查询免 JOIN）vs 只在大表+入口校验（RAGFlow tenant_id 只在 Knowledgebase，document 靠 kb 归属传递；AnythingLLM workspace_users 成员关联）。
+- **Qdrant 官方权威 [H1]**：每租户一个 collection"很少是最高效做法"（固定资源开销+Cloud 上限 1000）；推荐**单 collection+租户 payload 字段（is_tenant 索引，同租户向量聚簇）**；少量大租户才用 sharding。
+- **成熟项目实践**：无一用 Qdrant payload 路线——Dify 每 dataset 一个 collection、RAGFlow 每租户一个索引（KB 内 kb_id 过滤）、AnythingLLM 每 workspace 一个 namespace。BM25：RAGFlow 与向量同索引按租户拆；Dify economy 档关键词表按 dataset 一行序列化存储。
+- **成本评估**：t_doc/t_chunk 加 tenant 字段=小；Qdrant 存量点回填 payload=中；BM25 pickle 按租户/KB 拆+路由=中；检索查询多带 filter 代价低（官方明确 is_tenant 反优化读放大）；**风险在"漏写隔离键"，不在性能**。
+- **务实中间态**：AnythingLLM 式"只隔离管理入口+成员可见性，三处存储零改动"——检索池共享。
+
+### 10.3 对 DocLens 的分级结论（→ 方案确认单 v2 多用户部分）
+
+- **L0 登录门**（先例=anything-llm 单用户模式）：单管理员密码门+JWT（FastAPI 官方范式 pwdlib[argon2]+OAuth2PasswordBearer），全路由 Depends 一把门，数据零改动。
+- **L1 多用户**（先例=open-webui 待审制/anything-llm 邀请制）：users 表+业务表**可空 user_id 预埋**（anything-llm 同款，建表即带，升级零迁移）+Depends 角色链；检索池共享（入口可见性过滤）。
+- **L2 完整隔离**（先例=dify tenant 全表透传/Qdrant payload 路线）：三处存储齐动+存量回填——**建议只写设计文档不实施**（作品集语境边际价值低，且复杂化 M5 消融口径）。
+- 避开：MaxKB MD5 无盐；避免现在上 celery/消息队列（open-webui 已证不必）。
+
+### 10.4 来源清单（G/H 线，2026-11-12 实抓；GitHub 原文经 ghfast.top，Qdrant 官方文档直抓）
+
+| 线 | 来源 |
+|---|---|
+| G 线 | [G1] anything-llm prisma schema（users.role/suspended/invites/workspace_users/可空 user_id）；[G2][G6][G7] anything-llm 依赖与 models（bcrypt cost10/JWT 30d/system_settings 开关）；[G3] anything-llm endpoints/system.js（双模式登录/enable-multi-user 切换迁移回滚）；[G4][G5] strict/flex 中间件与按模式分支校验；[G8]–[G10] open-webui routers/auths.py+utils/auth.py+models/auths.py（首用户 admin/argon2 可配/session_stamp/sk- key/假哈希防时序）；[G11] dify console auth（三 token/refresh/setup）；[G12] dify 新版 RBAC；[G13][G14] MaxKB（MD5 反例/社区版限 2/token_cache 滑动续期/权限映射）；[G15] FastAPI 官方 OAuth2+JWT 教程（pwdlib[argon2]+PyJWT HS256） |
+| H 线 | [H1] qdrant.tech multitenancy 权威页（三方案/is_tenant/collection 开销与上限）；[H2] dify api/models/dataset.py（三层 tenant_id/复合索引/collection 命名/关键词表）；[H3] dify api/models/account.py（tenants/成员关系）；[H4] dify dataset_retrieval.py（检索入口租户过滤+二次授权）；[H5] ragflow v0.27.2 db_models.py（tenant/user_tenant/KB）；[H6] ragflow rag/nlp/search.py（租户索引/kb_id 过滤/混合检索）；[H7][H8] anything-llm workspace.js+stream.js（workspace_users 可见性/namespace）；[H9] FastGPT dataset schema（teamId 冗余+复合索引） |
+
+> 〔未核实〕FastGPT PG 向量表租户列与全文细节、dify 检索内核逐行（main 重构致旧路径 404，collection 划分与入口过滤已实证）、RAGFlow API 层权限校验位置——均不影响分级结论。
 
 ## 5. 待人工核实
 
