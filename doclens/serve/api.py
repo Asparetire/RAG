@@ -185,7 +185,10 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         p = resolve_pdf(doc_id)
         if p is None:
             raise HTTPException(status_code=404, detail="not found")
-        return FileResponse(p, media_type="application/pdf", filename=f"{doc_id}.pdf")
+        # content_disposition_type="inline"：S3 体检②——FileResponse 默认 attachment
+        # 会让 iframe 原生预览变成"直接下载"（浏览器见 attachment 即下载）
+        return FileResponse(p, media_type="application/pdf", filename=f"{doc_id}.pdf",
+                            content_disposition_type="inline")
 
     # ---- 图/表原图（R8：chunk_id 回表，K8① 包含性）----
     @protected.get("/api/figure/{chunk_id}")
