@@ -264,3 +264,62 @@ body {
 .at-progress { flex: 1; height: 6px; background: var(--line); border-radius: 999px; overflow: hidden; }
 .at-bar { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.6s; }
 .at-msg { color: var(--muted); font-size: 11px; }
+
+/* ============ 动效层（4.8 交互优化；J 线调研范式：CSS 优先、200ms ease-out、reduced-motion 降级） ============ */
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(.97) } to { opacity: 1; transform: none } }
+@keyframes msgIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+@keyframes slideInRight { from { opacity: 0; transform: translateX(28px) } to { opacity: 1; transform: none } }
+@keyframes blink { 50% { opacity: 0 } }
+
+/* 消息入场：淡入+上移 10px，200ms（流式更新不重放——元素跨渲染持久） */
+.msg { animation: msgIn 0.2s ease-out both; }
+/* 流式中的打字光标 */
+.msg.assistant.streaming .bubble.answer::after {
+  content: '▍'; color: var(--accent); margin-left: 2px;
+  animation: blink 1s steps(2) infinite;
+}
+/* 面板滑入：PDF 预览/侧栏/论文库 */
+.pdf-pane, .sidebar, .library { animation: slideInRight 0.24s ease-out both; }
+/* 视图切换淡入 */
+.chat, .library-main { animation: fadeIn 0.2s ease-out; }
+/* 卡片与行 hover 反馈 */
+.source-card, .paper-table tbody tr, .cat-row, .suggestion { transition: background 0.15s ease-out, border-color 0.15s ease-out, box-shadow 0.15s ease-out; }
+.source-card:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.09); }
+/* 按钮/可点元素统一过渡 + 按压反馈 */
+.btn, .model-btn, .cat-name, .cat-caret, .paper-link, .link-btn, .cite-chip, .view-switch button, .login-btn {
+  transition: background 0.15s ease-out, color 0.15s ease-out, border-color 0.15s ease-out, transform 0.1s ease-out;
+}
+.btn:active, .model-btn:active { transform: scale(0.97); }
+/* 弹窗：遮罩淡入 + 内容缩放上浮 */
+.modal-mask { animation: fadeIn 0.15s ease-out both; }
+.modal { animation: popIn 0.18s ease-out both; }
+
+/* 弹窗样式（4.8 移动/新建/重命名） */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, 0.45); z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal {
+  width: 380px; background: var(--panel); border-radius: 14px; padding: 20px 22px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+}
+.modal h4 { margin: 0 0 10px; }
+.modal-paper { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+.modal-label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+.modal-select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px;
+  font: inherit; font-size: 13px; outline: none; background: #fff;
+}
+.modal-select:focus { border-color: var(--accent); }
+.modal-error { color: var(--danger); font-size: 12px; margin-top: 8px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+/* 无障碍：用户偏好减少动效时全部降级（J 线调研标准做法） */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

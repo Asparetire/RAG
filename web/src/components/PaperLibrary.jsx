@@ -142,29 +142,41 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
     }
   }
 
-  const newCategory = async (parentId) => {
-    const name = window.prompt('新分类名称', '')
-    if (!name) return
-    try {
-      const r = await authedFetch('/api/categories', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, parent_id: parentId }),
-      })
-      const d = await r.json()
-      if (!r.ok) { window.alert(d.detail || '创建失败'); return }
-      load()
-    } catch (e) { if (e instanceof AuthError) onAuthError(e) }
-  }
+  // ---- 模态框状态（S3 体检/用户反馈：prompt 填 ID 体验差 → 下拉选择式）----
+  // kind: 'move' | 'new' | 'rename'
+  const [modal, setModal] = useState(null)
+  // move: {paper, catId}；new: {parentId, name}；rename: {catId, name}
+  const closeModal = () => setModal(null)
 
-  const renameCategory = async (node) => {
-    const name = window.prompt('重命名分类', node.name)
-    if (!name || name === node.name) return
-    const r = await authedFetch(`/api/categories/${node.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    })
-    if (!r.ok) { const d = await r.json(); window.alert(d.detail || '改名失败') }
-    load()
+  const submitModal = async () => {
+    if (!modal) return
+    try {
+      let r
+      if (modal.kind === 'move') {
+        const catId = modal.catId === '' || modal.catId == null ? null : Number(modal.catId)
+        r = await authedFetch(`/api/papers/${modal.paper.doc_id}/category`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ category_id: catId }),
+        })
+      } else if (modal.kind === 'new') {
+        r = await authedFetch('/api/categories', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: modal.name, parent_id: modal.parentId }),
+        })
+      } else if (modal.kind === 'rename') {
+        r = await authedFetch(`/api/categories/${modal.catId}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: modal.name }),
+        })
+      }
+      const d = await r.json()
+      if (!r.ok) { setModal({ ...modal, error: d.detail || '操作失败' }); return }
+      closeModal()
+      load()
+    } catch (e) {
+      if (e instanceof AuthError) { onAuthError(e); return }
+      setModal({ ...modal, error: e.message })
+    }
   }
 
   const deleteCategory = async (node) => {
@@ -175,19 +187,17 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
     load()
   }
 
-  const movePaper = async (paper) => {
-    const catInput = window.prompt(
-      `移动「${paper.title}」到分类 ID（留空=移到未分类）：\n` +
-      categories.map((c) => `${c.id}=${c.name}`).join('\n'), '')
-    if (catInput === null) return
-    const catId = catInput.trim() === '' ? null : Number(catInput)
-    const r = await authedFetch(`/api/papers/${paper.doc_id}/category`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_id: catId }),
-    })
-    if (!r.ok) { const d = await r.json(); window.alert(d.detail || '移动失败') }
-    load()
-  }
+  // 分类扁平化（带层级缩进）——下拉选项用
+  const flatCategories = (() => {
+    const { roots, byId } = buildTree(categories)
+    const out = []
+    const walk = (node, depth) => {
+      out.push({ id: node.id, name: node.name, depth })
+      node.children.forEach((ch) => walk(ch, depth + 1))
+    }
+    roots.forEach((r) => walk(r, 0))
+    return out
+  })()
 
   const visiblePapers = activeCat == null
     ? papers
@@ -198,15 +208,15 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
       <aside className="library-tree">
         <div className="library-tree-head">
           <span>论文库</span>
-          <button className="btn close" onClick={() => newCategory(null)}>新建分类</button>
+          <button className="btn close" onClick={() => setModal({ kind: 'new', parentId: null, name: '' })}>新建分类</button>
         </div>
         <CategoryTree
           categories={categories}
           papers={papers}
           activeCat={activeCat}
           onPick={setActiveCat}
-          onNewCategory={newCategory}
-          onRename={renameCategory}
+          onNewCategory={(parentId) => setModal({ kind: 'new', parentId, name: '' })}
+          onRename={(node) => setModal({ kind: 'rename', catId: node.id, name: node.name })}
           onDelete={deleteCategory}
         />
         <div className="library-upload">
@@ -259,7 +269,9 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
                 <td>
                   <button className="link-btn" onClick={() => onOpenPaper(p)}>预览</button>
                   {' '}
-                  <button className="link-btn" onClick={() => movePaper(p)}>移动</button>
+                  <button className="link-btn"
+                          onClick={() => setModal({ kind: 'move', paper: p, catId: p.category_id != null ? String(p.category_id) : '' })}>
+                    移动</button>
                 </td>
               </tr>
             ))}
@@ -268,6 +280,59 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
             )}
           </tbody>
         </table>
+
+        {modal && (
+          <div className="modal-mask" onClick={closeModal}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              {modal.kind === 'move' && (
+                <>
+                  <h4>移动论文</h4>
+                  <div className="modal-paper">{modal.paper.title}</div>
+                  <label className="modal-label">目标分类</label>
+                  <select className="modal-select" value={modal.catId}
+                          onChange={(e) => setModal({ ...modal, catId: e.target.value })}>
+                    <option value="">未分类</option>
+                    {flatCategories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {'　'.repeat(c.depth)}{c.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+              {modal.kind === 'new' && (
+                <>
+                  <h4>新建分类</h4>
+                  <div className="modal-paper">
+                    {modal.parentId == null ? '顶层分类'
+                      : `子分类（父：${flatCategories.find((c) => c.id === modal.parentId)?.name || modal.parentId}）`}
+                  </div>
+                  <label className="modal-label">分类名称</label>
+                  <input className="modal-select" autoFocus value={modal.name || ''}
+                         placeholder="1–64 字符"
+                         onChange={(e) => setModal({ ...modal, name: e.target.value })} />
+                </>
+              )}
+              {modal.kind === 'rename' && (
+                <>
+                  <h4>重命名分类</h4>
+                  <label className="modal-label">新名称</label>
+                  <input className="modal-select" autoFocus value={modal.name || ''}
+                         onChange={(e) => setModal({ ...modal, name: e.target.value })} />
+                </>
+              )}
+              {modal.error && <div className="modal-error">{modal.error}</div>}
+              <div className="modal-actions">
+                <button className="btn close" onClick={closeModal}>取消</button>
+                <button className="btn send"
+                        disabled={modal.kind !== 'move' && !(modal.name || '').trim()}
+                        onClick={submitModal}>
+                  {modal.kind === 'move' ? '移动' : modal.kind === 'new' ? '创建' : '保存'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
