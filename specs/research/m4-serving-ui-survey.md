@@ -1,6 +1,6 @@
 # DocLens M4 服务+UI·规划审查与同类项目调研笔记
 
-> 状态：**v1.0（已核实为主）**——2026-11-11。审查结论为本会话实测核实（SSH 探针/源码/数据）；A（同类项目引用高亮）/B（工程实现）两条调研线由研究代理并行完成，当日 web_search 全程 HTTP 402 不可用，全部经 ghfast.top/ungh.cc 代理直抓官方文档与源码核实；未能核实项在 §5 列明。
+> 状态：**v1.1（已核实为主）**——2026-11-11 立稿（v1.0：P/G/R 审查+A/B 两线调研）；**2026-11-12 增补 §7 高分项目横评（C 线）与 §8 交互与协议深挖（D 线）**，随 M4 立项 G1 一并过目。审查结论为本会话实测核实（SSH 探针/源码/数据）；A/B/C/D 四条调研线由研究代理并行完成，web_search 全程 HTTP 402 不可用，全部经 ghfast.top/ungh.cc 代理直抓官方文档与源码核实；未能核实项在 §5 列明。
 > 用途：主计划 M4 节（`doclens-multimodal-rag.plan.md` §5 M4）的问题审查 + [m4-runbook](../plans/)（**待立项**）的方案佐证与修订输入，随 G1 确认门一并过目。
 > **配套演示**：[m4-ui-mockup.html](m4-ui-mockup.html)——单文件交互原型（无后端、无构建，浏览器直接打开）：演示 §1.4 契约的完整时序（阶段条 → sources 先于首 token → 思考折叠面板 → 流式正文+可点击引用 → bbox 百分比高亮 → citations/done），含图表题/表格题/不可回答题三个剧本（bbox 抄自真实 doc.json 探针值）；M4 runbook 立项时可直接作前端布局蓝本。
 > 与 [m3-retrieval-generation-survey](m3-retrieval-generation-survey.md) 强关联：M4 的 SSE 契约直接消费 M3 调研 R9（思考流）/R11（引用编号语义）/R15（trace 字段），本文不重复引用其原文，只标"m3 调研 R#"。
@@ -42,7 +42,7 @@
 m2 S4 已取证 3306/6333 外部不可达——同理，容器内 uvicorn/Vite 监听的端口，Windows 浏览器也**不能直连**。可行路径只有两条：VS Code Remote-SSH 的自动端口转发（已打通 Remote-SSH，转发是内建能力），或 `ssh -L 8000:127.0.0.1:8000` 手动隧道【SSH 连通性实测可用】。M4 runbook 必须把"后端 bind 127.0.0.1 + 转发方式 + 浏览器访问 http://localhost:8000"写成验收步骤，并顺带完成 AGENTS 里挂着的".env 写 10.14.50.123 不可达"勘误的表述统一（M4 后端在容器内跑，.env 全部 127.0.0.1，主计划 §9 注释里的旧说法不要再扩散）。
 
 **P3：依赖时序——M4 的两个验收步全部压在一个还没开工的里程碑上。**
-`doclens/retrieve` 与 `doclens/generate` 目前是空壳【实测】，M3 runbook 未立项。M4 的 /api/query 没有可包的管线、web/ 没有可显示的引用。结论：**M4 立项排在 M3 收官之后**（顺序本来就是 M3→M4，这里只是提醒：M4 runbook 里不许出现"先做 UI 用假数据"之类的安排——要 mock 就只 mock /api/query 一个边界，且以 §4 契约为准，避免契约双侧漂移）。
+`doclens/retrieve` 与 `doclens/generate` 目前是空壳【实测】，M3 runbook 未立项。M4 的 /api/query 没有可包的管线、web/ 没有可显示的引用。结论：**M4 立项排在 M3 收官之后**（顺序本来就是 M3→M4，这里只是提醒：M4 runbook 里不许出现"先做 UI 用假数据"之类的安排——要 mock 就只 mock /api/query 一个边界，且以 §1.4 契约为准，避免契约双侧漂移）。
 
 ### 1.2 缺口（规划未覆盖、runbook 立项时补）
 
@@ -69,7 +69,7 @@ m2 S4 已取证 3306/6333 外部不可达——同理，容器内 uvicorn/Vite �
 | R8 | assets.py 职责定稿三件套（PDF 文件流/figure 图片/引用数据随 SSE 下发），不做服务端页面渲染（Kotaemon 老路，§2.3）；渲染库选型 G1 拍板：**react-pdf 11 + 自绘 overlay（主推）** vs react-pdf-highlighter 6.1（RAGFlow 同款备选，实质停更）——理由见 §2.3；worker/cMaps 配置按 §3.5 | runbook 4.1/4.2 | **必要** |
 | R9 | 4.3 Gradio 砍单或降级（若保留：`mount_gradio_app` 挂 /gradio；Chainlit 已停维护排除）；FR-5.3 检索可视化并入 4.2（stage 进度 + 分数面板） | runbook 4.3 | 建议 |
 | R10 | 安全验收五条前置（路径穿越守卫/bind 127.0.0.1/无 CORS/VITE_ 零秘密/日志脱敏） | runbook 验收 + §8 细化 | **必要** |
-| R11 | M4 立项时序=M3 收官后；若要提前开工 UI，只许 mock /api/query 一个边界且以 §4 契约为准 | runbook 依赖声明 | 建议 |
+| R11 | M4 立项时序=M3 收官后；若要提前开工 UI，只许 mock /api/query 一个边界且以 §1.4 契约为准 | runbook 依赖声明 | 建议 |
 | R12 | 测试补位：SSE 契约测试 1 条 + 前端手工验收清单（5 项），不上 JS 测试框架 | runbook 测试策略 | 建议 |
 
 ## 1.4 /api/query SSE 事件契约（提案——M3/M4 接口边界，立项时冻结）
@@ -157,6 +157,123 @@ event: error      data: {"code":"...","message":"...（脱敏）"}
 
 - **Chainlit 已归档、官方声明停维护**（无 bug fix/安全更新）[B11]——从候选中排除；Gradio 活跃（当前 6.31），ChatInterface 流式 + ChatMessage metadata 折叠步骤卡 + `mount_gradio_app` 挂进 FastAPI [B7][B12]。
 - 落地：4.3 若保留 Gradio，走 `mount_gradio_app` 挂 `/gradio` 复用同一管线（成本很低）；开发期验收主力仍是 M3 的 `query_cli --smoke`（m3 调研 R16）。演示阶段进度 = §1.4 的 `event:stage` 驱动前端三段步进条（检索→重排→生成，附各段耗时），自绘成本极低；Perplexity 式步骤条无开源直接复刻先例〔未核实〕。
+
+## 7. 高分项目横评补充（C 线，2026-11-12——M4 立项加做，12 项目全量实抓）
+
+> 动机：G1 立项前对"服务+UI"形态做一轮高分 GitHub 项目横评，验证 R1–R12 选型、找可借鉴交互。星标均经 ungh.cc 实抓（截至 2026-11-12）；ai-chatbot 已更名 vercel/chatbot。D 线（交互与协议深挖）见 §8。
+
+### 7.1 对比矩阵（星标实抓 [C1]；其余实抓见 [C2]–[C18]）
+
+| 项目(星标) | 前端栈 | 流式协议 | 引用形态 | 思考流 | 阶段提示 | PDF 预览 |
+|---|---|---|---|---|---|---|
+| dify 161.0k | Next.js | SSE（ssePost 解析 data: 行，实抓） | 来源卡片/文档级〔昨日口径〕 | reasoning_chunk 独立事件（实抓） | node_started/finished+agent_log 事件（实抓） | react-pdf-highlighter 依赖〔用途未核实〕 |
+| open-webui 158.4k | Svelte5+Vite | SSE(eventsource-parser)+socket.io 并存 | 编号+来源卡片+CitationModal（组件实抓） | 〔未核实〕 | StatusHistory/StatusItem 组件（实抓） | pdfjs-dist+FilePreview（实抓） |
+| ragflow 94.0k | React18+Vite+AntD | SSE（eventsource-parser 实抓） | **bbox 页级高亮**（昨日复核；react-pdf-highlighter 依赖实抓） | 〔未核实〕 | 〔未核实〕 | react-pdf-highlighter 内嵌（实抓） |
+| anything-llm 68.2k | React18+Vite | SSE（@microsoft/fetch-event-source 实抓） | 编号+来源侧栏（Citation/SourcesSidebar 组件实抓） | thinking 动画+ReasoningEffort（实抓） | thinking 动画（实抓） | 〔未核实〕 |
+| private-gpt 57.6k | 自带 Workbench UI（演示用） | messages API streaming（README 实抓；SSE〔未核实〕） | citations（README 实抓；粒度未核实） | 〔未核实〕 | 〔未核实〕 | 〔未核实〕 |
+| onyx 33.3k | Next16+React19 | 〔未核实〕 | 文档级〔昨日口径〕 | 〔未核实〕 | 〔未核实〕 | pdfjs-dist+react-pdf（实抓） |
+| FastGPT 30.0k | Next.js+Chakra | SSE（@fortaine/fetch-event-source 实抓） | 编号+引用列表（官方文档 quoteList.mdx 实抓） | 〔未核实〕 | 〔未核实〕 | 〔未核实〕 |
+| kotaemon 25.9k | Gradio | Gradio 内建流 | 引用+相关性评分+**浏览器内 PDF 高亮**（README 实抓；文本匹配级=昨日口径） | 〔未核实〕 | 低相关告警（README 实抓） | 内置 PDF_JS 查看器（README 实抓） |
+| MaxKB 23.1k | Vue3+Element Plus | 〔未核实〕（依赖无 SSE 库） | 段落级〔昨日口径〕 | 〔未核实〕 | 〔未核实〕 | pdfjs-dist（实抓） |
+| ai-chatbot 21.0k | Next16+React19 | AI SDK 数据流（SSE 基）+resumable-stream 续流（实抓） | 无（非 RAG） | message-reasoning.tsx+ai-elements/reasoning.tsx 折叠组件（实抓） | shimmer/spinner（实抓） | 文档 artifact 预览（实抓） |
+| QAnything 14.2k | Vue3+Vite+AntDVue | SSE（fetch-event-source 实抓） | 引用弹窗（ChatSourceDialog 实抓） | 〔未核实〕 | 〔未核实〕 | Source/PdfView.vue+@vue-office/pdf（实抓） |
+| Verba 7.7k | Next14+daisyUI | 〔未核实〕 | 来源卡片〔昨日口径〕 | 〔未核实〕 | 〔未核实〕 | react-pdf/renderer 为"生成"非"预览"（实抓） |
+
+### 7.2 共性规律（→ 对 R1–R12 的校验结论）
+
+1. **SSE 一统（7/12 实抓到 SSE 依赖）**：RAGFlow/Dify/OpenWebUI/AnythingLLM/FastGPT/QAnything/ai-chatbot 全走 SSE 系；WebSocket 仅 open-webui 与 dify 作附属实时通道——**R3 的 FastAPI SSE 选型是主流正解**。
+2. **引用交互天花板普遍在文档级**：多数止步"编号+来源卡片"；页级高亮仅 kotaemon（文本匹配）与 RAGFlow（bbox）——**bbox 级仍是稀缺差异点（2/12），DocLens 路线对齐头部且差异化成立**（印证 §2.1/R8）。
+3. **思考流折叠成标配**：dify 独立 reasoning_chunk 事件、ai-chatbot reasoning 折叠组件、anything-llm thinking 动画——**R5 双字段分流+折叠面板方向与业界一致**。
+4. **阶段可视化=轻事件流**：dify node 事件、open-webui StatusHistory、anything-llm 动画，无一用重型进度系统——**K6 用 stage 事件驱动步进条的成本判断成立**。
+5. **pdfjs 系预览是标配（7/12）但 ≠ 引用定位**：打通"点击引用→原页 bbox"的仅 RAGFlow/kotaemon 两家——预览易、溯源难，M4 验收把 bbox 对齐抽检（R7）设为硬项是对的。
+6. **@microsoft/fetch-event-source 是 SSE 消费事实标准**（anything-llm/QAnything 直用，FastGPT 用其 fork @fortaine）——K3 选型有充分先例。
+
+### 7.3 对 DocLens M4 的可借鉴点（→ runbook K 决策佐证）
+
+- **dify**：SSE 事件词汇表最完整（message/agent_thought/reasoning_chunk/node_started/agent_log…），"一个 SSE 端点+type 分流"的事件契约设计最值得参照——§1.4 的 stage/token/thinking 分事件与之同构。
+- **open-webui**：Citations+CitationModal 即引用 UI 最小集；StatusHistory 证明"阶段状态=事件数组渲染"足够轻。反差：socket.io 全家桶对单人作品集过重，不采。
+- **anything-llm**：独立 SourcesSidebar+SourceDetailView 的来源侧栏交互可抄；生成期 thinking 动画占位成本低效果好。
+- **ragflow**：唯一 bbox 级先例，react-pdf-highlighter+pdf.js 路线证明单人可维护；引用[n]→预览页内定位联动抄其交互（库本身仍不采，见 R8）。
+- **ai-chatbot**：ai-elements/reasoning 折叠思考面板、resumable-stream 断线续流——前者佐证 K4 三态，后者 M4 不采（单次问答流语义，刷新重问即可，R3 已定）。
+- **QAnything**：结构最像 M4 目标（SSE+引用弹窗→PDF 预览链路完整）但 2026-09 起停更——只抄交互不依赖。
+- **private-gpt**：已转型 API 层、UI 降级为演示——启示：**服务与 UI 解耦，README/API 契约先行**（M4 的契约测试 K10 与此同旨）。
+- **kotaemon**：引用+相关性评分小字值得抄（→ K5 侧栏卡片附融合分）；已停更（pushedAt 2026-07）。
+
+### 7.4 来源清单（C 线，2026-11-12 实抓）
+
+| # | 来源 |
+|---|---|
+| [C1] | ungh.cc/repos/{12 项目} JSON——星标数与默认分支（全部实抓） |
+| [C2] | ghfast.top/…/ragflow/main/web/package.json——React18+Vite、eventsource-parser、react-pdf-highlighter |
+| [C3] | ghfast.top/…/dify/main/web/package.json——Next、socket.io-client、react-pdf-highlighter |
+| [C4] | ghfast.top/…/dify/main/web/service/base.ts——ssePost/handleStream 解析 data: 行；reasoning_chunk/node_* 事件 |
+| [C5] | ghfast.top/…/open-webui/main/package.json——Svelte5、socket.io-client、eventsource-parser、pdfjs-dist |
+| [C6] | ungh open-webui main 文件清单+正则提取——Citations.svelte/CitationModal/CitationsModal/StatusHistory |
+| [C7] | ghfast.top/…/anything-llm/master/frontend/package.json——React+Vite、fetch-event-source |
+| [C8] | ungh anything-llm master 文件清单+正则提取——Citation/SourcesSidebar/SourceDetailView/thinking-animation.webm |
+| [C9] | ghfast.top/…/FastGPT/main/projects/app/package.json——Next、fetch-event-source |
+| [C10] | ungh FastGPT main 文件清单——document/content/guide/chat/quoteList.mdx |
+| [C11] | ghfast.top/…/MaxKB/v2/ui/package.json——Vue3+Element Plus+pdfjs-dist、无 SSE 库 |
+| [C12] | ghfast.top/…/QAnything/qanything-v2/front_end/package.json+ungh 文件清单——Vue3、fetch-event-source、Source/PdfView.vue、ChatSourceDialog.vue |
+| [C13] | ghfast.top/…/onyx/main/web/package.json——Next16、pdfjs-dist、react-pdf |
+| [C14] | ghfast.top/…/kotaemon/main/README.md——Gradio；in-browser PDF viewer with highlights；PDF_JS 可选 |
+| [C15] | ghfast.top/…/private-gpt/main/README.md——API 层定位、Workbench UI、messages API streaming、retrieval with citations |
+| [C16] | ghfast.top/…/vercel/chatbot/main/package.json+ungh main 文件清单——ai v7、resumable-stream、message-reasoning.tsx、ai-elements/reasoning.tsx |
+| [C17] | ghfast.top/…/Verba/main/frontend/package.json——Next14、react-pdf/renderer |
+| [C18] | ghfast.top/…/dify/main/README.md——产品定位 |
+
+> 失败路径注记：ungh 单文件端点 302→raw.githubusercontent.com（本机 DNS 拦截+工具不跟随跨域重定向），原始文件一律走 ghfast.top；open-webui package.json 首次 ghfast 429 限流重试成功；Onyx/MaxKB/Verba 流式细节、各项目思考流具体渲染未逐文件取证者均标〔未核实〕。
+
+## 8. 交互与协议深挖（D 线，2026-11-12——三题全部当日实抓核实）
+
+### 8.1 RAGFlow 引用交互与 v1.0 现状 [D1][D2]
+
+- main=v1.0.0（2026-11-06 GA：Go 全量重写 + 全新 Agentic Chat，取代原 Low/Medium/High/Ultra 思考档；聊天历史存 prompt/token 用量/执行时间；消息列表虚拟化 #21790）。
+- web 依赖实抓：`react-pdf-highlighter ^6.1.0`、`eventsource-parser ^1.1.2`、zustand、react-resizable-panels、react-markdown、Vite。
+- 组件级交互流〔未核实〕（v1.0 主权重写致旧路径失效、目录树 API 截断）；依赖佐证的典型流：回答内引用标记 → Dialog/侧栏打开 PDF 预览 → react-pdf-highlighter 按 positions（页码+矩形数组）bbox 高亮 → 文档级来源聚合——与 runbook K5 同型。
+- 可借鉴：①eventsource-parser 手工解析 fetch 流（不用原生 EventSource，兼容 POST+鉴权头）；②positions 数据形态可直接参考；③引用/用量/耗时随消息持久化回显。
+
+### 8.2 思考面板三态实现惯例 [D3]–[D9][D11]
+
+**vercel/ai-chatbot `ai-elements/reasoning.tsx`（全逻辑实抓）**：
+- 三态：流式自动展开（`defaultOpen ?? isStreaming`）→ 结束 1s 后自动折叠（AUTO_CLOSE_DELAY=1000，可再展开）→ 历史态标题 "Thought for N seconds"（duration=ceil(ms/1000) 前端计时）。
+- 触发器：思考中=Shimmer "Thinking..."；内容区限高 200px 滚动+流式自动滚底+暗色小字；**纯等待期（尚无任何 part）显示 "Waiting..."——与思考态分层**。
+- 协议：reasoning 是独立消息 part（state:"streaming"），多 part 合并渲染。
+- OpenWebUI：reasoning 以 `<details type="reasoning" done duration>` 块嵌在 content 里流式输出，marked 扩展解析（rAF 节流重解析）；复制/编辑时剥离。三态渲染细节〔未核实〕。
+- AI SDK 官方：reasoning-start/delta/end 为一等 part，与 text 平级。
+- → runbook K4 落地：默认态（无 reasoning）不渲染+stage 期 Waiting 占位；流式态首条 reasoning 即自动展开+Shimmer+限高滚底；完成态 1s 自动折叠"已思考 N 秒"可回看；**reasoning 走独立增量事件**（一等 part 惯例）。
+
+### 8.3 SSE 事件对照与契约校验 [D11]–[D16]
+
+| 维度 | Dify | FastGPT | AI SDK |
+|---|---|---|---|
+| 载体 | data 行 JSON 内 event 字段 | SSE event 字段+类型化 data | data 行 JSON 内 type 字段 |
+| 文本 | message/agent_message 增量 | answer（OpenAI chunk 形态） | text-start/delta/end |
+| 思考 | agent_thought（legacy agent） | 复用 answer，data 带 reasoning_content | reasoning-start/delta/end |
+| 来源/引用 | 无专用流事件，message_end 汇总 | flowResponses 尾部一次发全 | source-url/document 整条 part |
+| 结束 | message_end(+workflow_finished) | answerStop(finish_reason)→data:[DONE] | finish part→data:[DONE] |
+| 错误 | error 事件（status/code/message） | error 事件 | error part |
+| 心跳 | ping 首帧+约 10s（event:ping 无 data） | 〔未核实〕 | ping keep-alive |
+
+**对 §1.4 草案的三条校验**：
+1. **一致**：token≈text-delta/answer 增量；thinking 独立事件有 AI SDK 一等 part 先例（FastGPT 复用 answer 为另一派，不采）；error 三家必有且结构化（对齐 Dify 的 code/message，脱敏）；done≈message_end/finish，挂 usage/finish_reason 的惯例我们 §1.4 已具备。
+2. **采纳**：①reasoning 增量补独立事件（§1.4 只有 thinking 状态事件、缺思考文本通道，而 R5 意图是流式灰字——runbook 3.1 冻结为 §1.4 超集）；②stage 附可读名 detail（步骤级先例：FastGPT flowNodeStatus、AI SDK start-step/finish-step），各段耗时前端按事件到达差实时显示、权威值随 done.timing；③心跳已有（sse-starlette ping=15s，Dify 10s 同量级）。
+3. **sources/citations 拆分正确**：成熟项目均不逐 token 发引用——FastGPT 尾部一次发全、Dify 挂 message_end、AI SDK source part 整条非增量；我们 sources 先行（侧栏即时可点）+citations 生成完发终版，与三家兼容且体验更优。
+
+### 8.4 来源清单（D 线，2026-11-12 实抓；GitHub 原始文件均经 ghfast.top 代理）
+
+| # | 来源 |
+|---|---|
+| [D1] | ragflow main web/package.json（react-pdf-highlighter/eventsource-parser 等） |
+| [D2] | ungh ragflow releases/latest（v1.0.0 GA 2026-11-06） |
+| [D3]–[D7] | open-webui main：ResponseMessage.svelte / ContentRenderer.svelte / marked citation-extension.ts / extension.ts / Markdown.svelte |
+| [D8][D9] | vercel/chatbot main：components/ai-elements/reasoning.tsx / components/chat/message.tsx |
+| [D10] | vercel/chatbot main：components/chat/data-stream-handler.tsx |
+| [D11] | ai-sdk.dev/docs/ai-sdk-ui/stream-protocol（reasoning-start/delta/end 一等 part） |
+| [D12][D13] | dify-docs main：api-reference/guides/streaming.mdx / chat.mdx |
+| [D14]–[D16] | FastGPT main：packages/global/core/workflow/runtime/{constants,sse}.ts、projects/app/src/pages/api/v1/chat/completions.ts |
+
+> 失败路径：ungh 文件端点 302→raw.githubusercontent（DNS 拦截不可跟）、jsdelivr 报包超 50MB、sourcegraph 403、RAGFlow 组件路径探测 404（v1.0 重写）——message_end 的 metadata 细节、OpenWebUI 思考三态渲染细节、RAGFlow 组件级引用流程标〔未核实〕，未编造。
 
 ## 5. 待人工核实
 
