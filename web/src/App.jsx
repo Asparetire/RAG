@@ -1,6 +1,7 @@
 // m4-runbook K1/K4/K5：SSE 事件 → 消息状态机（App 级 useReducer）。
 // 事件语义对齐冻结契约（runbook §3.1）：stage/sources/thinking/reasoning/token/citations/done/error。
-import { useCallback, useMemo, useReducer, useRef, useState } from 'react'
+// 对话本地持久化（4.6 修复项）：localStorage 存最近 60 条，刷新不丢；"清空对话"一键清除。
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { askQuestion } from './api.js'
 import ChatPane from './components/ChatPane.jsx'
 import SourceSidebar from './components/SourceSidebar.jsx'
@@ -8,6 +9,19 @@ import PdfPane from './components/PdfPane.jsx'
 
 let _seq = 0
 const nextSeq = () => ++_seq
+
+const STORAGE_KEY = 'doclens_chat_v1'
+
+function loadStored() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed?.messages) ? parsed : null
+  } catch {
+    return null
+  }
+}
 
 // 新建一条 assistant 消息（流式目标）
 function newAssistantMsg(profile) {
@@ -67,17 +81,16 @@ function applyEvent(msg, { event, data }) {
       m.usage = data.usage
       m.traceId = data.trace_id
       m.done = true
-      // 权威耗时校正（R6：到达差为实时估算，done.timing 为准）
+      // 权威耗时校正（R6）：done.timing 为准；stageOrder 保持字符串（4.6 修复：
+      // 之前此处把 stageOrder 改写成对象数组，StageBar 渲染对象为 React 子元素
+      // 直接崩溃 → 白屏）
       const timing = data.timing || {}
-      m.stageOrder = m.stageOrder.map((s) => ({
-        stage: s,
-        elapsed: timing[`${s === 'generate' ? 'generate' : s}_ms`] ?? m.stages[s]?.elapsed ?? null,
-      }))
-      for (const s of m.stageOrder) {
-        if (m.stages[s.stage]) {
-          m.stages = { ...m.stages, [s.stage]: { ...m.stages[s.stage], elapsed: s.elapsed } }
-        }
+      const stages = { ...m.stages }
+      for (const s of Object.keys(stages)) {
+        const v = timing[`${s}_ms`]
+        if (v != null) stages[s] = { ...stages[s], elapsed: v }
       }
+      m.stages = stages
       break
     }
     case 'error':
@@ -134,13 +147,17 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">DocLens <span className="brand-sub">多模态论文问答</span></div>
-        <label className="profile-pick">
-          检索档位
-          <select value={profile} disabled={status === 'streaming'}
-                  onChange={(e) => setProfile(e.target.value)}>
-            {['A', 'B', 'C', 'D', 'E', 'F'].map((p) => <option key={p} value={p}>{p} 档</option>)}
-          </select>
-        </label>
+        <div className="topbar-actions">
+          <button className="btn close" onClick={() => dispatch({ type: 'clear' })}
+                  disabled={status === 'streaming'}>清空对话</button>
+          <label className="profile-pick">
+            检索档位
+            <select value={profile} disabled={status === 'streaming'}
+                    onChange={(e) => setProfile(e.target.value)}>
+              {['A', 'B', 'C', 'D', 'E', 'F'].map((p) => <option key={p} value={p}>{p} 档</option>)}
+            </select>
+          </label>
+        </div>
       </header>
       <div className="main">
         <ChatPane
@@ -177,6 +194,8 @@ function messagesReducer(state, action) {
     case 'stop':
       return state.map((m) => (m.role === 'assistant' && !m.done
         ? { ...m, done: true, finish: m.finish || 'aborted' } : m))
+    case 'clear':
+      return []
     default:
       return state
   }

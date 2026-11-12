@@ -1,4 +1,5 @@
 // 单条消息：思考三态面板 + 流式正文（[n] 渲染为可点击 chip）+ 拒答/错误态 + 引用角标。
+import { useEffect } from 'react'
 import ThinkingPanel from './ThinkingPanel.jsx'
 import StageBar from './StageBar.jsx'
 
@@ -34,8 +35,11 @@ export default function Message({ msg, onCiteClick, onDone }) {
   if (msg.role === 'user') {
     return <div className="msg user"><div className="bubble">{msg.content}</div></div>
   }
-  // 流式完成即上报（App 据此解除输入锁定）
-  if (msg.done) setTimeout(() => onDone(msg), 0)
+  // 流式完成即上报（App 据此解除输入锁定）——副作用放 effect，不放渲染体
+  useEffect(() => {
+    if (msg.done) onDone(msg)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [msg.done])
   const sources = msg.sources || []
   return (
     <div className={`msg assistant${msg.done ? '' : ' streaming'}`}>
