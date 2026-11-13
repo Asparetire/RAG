@@ -43,6 +43,7 @@ class EvalQuestion:
     origin: str = "vlm"             # vlm | smoke
     noise_variant: bool = False     # True=评测时注入噪声上下文
     quote: str = ""                 # 原文依据句（VLM 逐字摘抄；锚定校验用）
+    reading: str | None = None      # "figure"=证据本体是图（豁免文本锚定）
     gold_hint: str = ""
     status: str = "candidate"       # candidate | approved | rejected | rewritten
 
@@ -308,8 +309,14 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
             if len([c for c in candidates if c.type == "table"]) >= per_type:
                 break
 
-    # 3) 图表题（带原图）
+    # 3) 图表题（带原图）——图表题**豁免文本锚定**（图内视觉信息不在任何文本 chunk，
+    # s15 镜像教训）；锚定改为 caption 重叠校验（证明出题者真看了图注上下文）；
+    # gold 挂 image chunk + 同页 caption chunk（引用跳转可见图+图注）。
     figs = imgs[:per_type]
+    cap_by_page = {}
+    for c in pool:
+        if c["kind"] == "caption":
+            cap_by_page.setdefault(c["page"], c)
     for im in figs:
         blob = _load_image_blob(doc_id, im["image_path"])
         if blob is None:
@@ -317,11 +324,21 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
         raw = await _ask(_FIG_PROMPT.format(n=1, caption=im["content"][:600]),
                          images=[blob])
         for item in raw[:1]:
+            gold_list = [{"doc_id": doc_id, "chunk_id": im["chunk_id"]}]
+            cap_chunk = cap_by_page.get(im["page"])
+            if cap_chunk:
+                gold_list.append({"doc_id": doc_id, "chunk_id": cap_chunk["chunk_id"]})
+            caption_anchored = anchor_check(im["content"][:200] or "x",
+                                            [im["content"] or "x"])
+            if im["content"] and not caption_anchored:
+                continue  # 图注自锚定都不过=异常，跳过
             candidates.append(EvalQuestion(
                 q_id="", type="figure", lang="zh",
                 question=item.get("question", ""),
                 ref_answer=item.get("ref_answer", ""),
-                gold=[{"doc_id": doc_id, "chunk_id": im["chunk_id"]}]))
+                gold=gold_list,
+                reading="figure",
+                quote=_extract_quote(item)))
             if len([c for c in candidates if c.type == "figure"]) >= per_type:
                 break
 
@@ -359,7 +376,8 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
         if not q.question.strip() or (q.answerable and not q.ref_answer.strip()):
             errors.append(f"空题弃: {q.question[:30]}")
             continue
-        if q.answerable and q.gold:
+        if q.answerable and q.gold and q.reading != "figure":
+            # 图表题豁免文本锚定（图内视觉信息不在文本 chunk——s15 镜像教训）
             contents = [content_by_id.get(g["chunk_id"], "") for g in q.gold]
             anchored = (anchor_via_quote(q.quote, contents)
                         or anchor_check(q.ref_answer, contents))
