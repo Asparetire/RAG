@@ -18,6 +18,7 @@
 | 扩展消融 | D 档 × gen_model 三模型（抽样 50 题） | glm/kimi/deepseek 对比数据入表 |
 | 消融报告 | `reports/ablation.md` | 总表（六档×指标×bootstrap 95% CI）+分题型+归因分布 F0–F6+每模块一句话结论；数字可复核 |
 | judge 校准 | 抽样 50 题人工对齐报告 | judge 与人工一致率 ≥80%（MT-Bench 参考线）；未达标则调 prompt 重校 |
+| **评测看板（5.8）** | 前端第三 Tab + `/api/eval/*` 端点 | 看板数字与 reports/ablation.md **完全一致**（同源 t_eval_result）；六档对比表/归因堆叠条/逐题下钻（六档答案并排+trace 链接）/跑批进度轮询可用 |
 | 回归 | `python -m pytest -q` 双端 | 196 存量+新增全绿；`--smoke` 不回归 |
 | 里程碑 | commit（每步）+ `git tag m5` + push 双端 | 双端同步 |
 
@@ -51,6 +52,16 @@
 | K10 | **报告结构** | reports/ablation.md：总表（六档×指标×CI）→分题型→QASPER/BEIR 外部基准节→归因分布→gen_model 对比→每模块一句话结论 | 只堆数字无叙事：面试讲不出 |
 | K11 | **S4-11 顺手修** | pipeline._load_image_blob 绝对路径放行改为包含性校验（S4 报告建议 M5 首项） | 带病进评测 |
 
+### 3.1 实施细则（G1 批准时锁定的执行细节）
+
+- **出题模板（三套+负面）**：文本题=相邻 2–3 块出理解型问题（禁复述原文措辞）；图表题=**带原图**给 VLM 出图内容题（趋势/数值）；表格题=数据对比/极值；不可答=反事实四模板（改数字/改年份/拼凑两篇/语料外概念）；噪声题=题面正常、评测时注入 10 个无关块（`noise_variant: true`，RGB 口径）。
+- **三道质量闸参数**：相似去重阈值=embedding 余弦 0.85；原文锚定=ref_answer 关键句在 gold chunk 原文包含；BM25 伪题=gold 排名第一且 分数/次名 >3 倍（断层领先=字面匹配）。
+- **faithfulness 全量**（185×6 档，核心指标，每组 ~8 次 NLI 小调用走 ctx_model）；**answer_relevancy 仅 D 档**（消融对比用）；噪声子集双跑（干净 vs 注噪，20 题×2 档）。跑前额度预检。
+- **attribution 判定顺序**（取首个失败环节）：refused 但应答→F6；gold 不在融合池→F2（gold 关键句不在 parsed 产物→F1）；融合池有但重排后掉出 final_top→F4；排名 OK 但答案无引用/引用越界→F5；有引用但内容与 ref_answer 不符→F5 生成质量；全对但 judge 低分→人工复核队列（疑似 F0 出题错）。
+- **幂等键**：t_eval_result=(run_id, q_id, profile, model)——重跑跳过已完成；run_id=suite 名+时间戳；**新增 t_eval_run 表**（run_id/suite/status/total/completed）供看板轮询进度。
+- **跑批并发 2–3 路**（LLM 限速）；`run_eval.py --serve` 模式=命令行起跑批+写 DB，看板轮询读取（无常驻任务）。
+- **NLI/verdict 全部走 ctx_model**（deepseek-v4-flash，便宜且与生成模型分离）；嵌入复用 EmbeddingClient（answer_relevancy 余弦）。
+
 ## 4. 变更清单（文件级）
 
 | 动作 | 文件 | 职责 |
@@ -59,7 +70,10 @@
 | 新增 | doclens/eval/__init__.py、dataset.py（K2 出题管线）、metrics.py（K5）、stats.py（K7）、attribution.py（K9）、ablation.py（K8 跑批） | 评测模块 |
 | 新增 | scripts/run_eval.py、scripts/eval_qasper.py、scripts/eval_beir.py、scripts/eval_review_report.py | 入口：一键跑批/QASPER 接入/BEIR 旁测/人审报告生成 |
 | 新增 | data/eval/dataset_v1.jsonl、qasper_subset.jsonl（版本化；data/ gitignore 需加例外——沿 smoke_queries.json 先例） | 题集资产 |
-| 修改 | scripts/init_db.py | t_eval_result 补列（如 model 维度——若现有列不够） |
+| 修改 | scripts/init_db.py | 新增 t_eval_run 表（跑批进度，看板轮询）+t_eval_result 补列（model 维度） |
+| 新增 | doclens/serve/eval_api.py 或并入 api.py：GET /api/eval/summary、/api/eval/runs、/api/eval/attribution、/api/eval/question/{q_id}、POST /api/eval/run（跑批触发） | 看板只读端点+跑批触发（受保护组） |
+| 新增 | web/src/components/EvalDashboard.jsx | 评测看板（第三 Tab：六档对比表/归因堆叠条/逐题下钻/跑批进度） |
+| 修改 | web/src/App.jsx（第三 Tab 接线） | 视图切换 |
 | 新增 | tests/test_metrics.py、test_stats.py、test_dataset.py | 指标固定用例/出题预筛逻辑 |
 | 修改 | requirements.txt（beir 或直接解析 zip——K4 落地定） | 依赖 |
 | 新增 | reports/ablation.md、reports/eval_review_*.md（人审报告） | 产出 |
@@ -77,7 +91,8 @@
 | 5.5 | **指标三件套**：metrics.py（K5）+stats.py（K7）+attribution.py（K9）+单测 | 指标单测绿；金标 10 题回归一致 | 5.2 |
 | 5.6 | **跑批**：main 套件（A–F×185）+QASPER（D 档）+gen_model（抽样 50）+断点续跑实测 | t_eval_result 全量；断点续跑验证 | 5.3/5.5 |
 | 5.7 | **报告**：reports/ablation.md（K10）+judge 校准报告 | 数字可复核；叙事完整 | 5.6 |
-| 收尾 | S3+S4 双审（评测面轻量）+CHANGELOG+tag m5+主计划补记+AGENTS 翻页 | 双端同步 | 5.7 |
+| 5.8 | **评测看板**：t_eval_run 表+/api/eval/* 端点+EvalDashboard 第三 Tab（六档对比/归因堆叠条/逐题下钻/跑批进度轮询） | 看板数字与 ablation.md 一致（同源）；六档对比/归因/下钻可用 | 5.7 |
+| 收尾 | S3+S4 双审（评测面轻量）+CHANGELOG+tag m5+主计划补记+AGENTS 翻页 | 双端同步 | 5.8 |
 
 ## 6. 测试策略（普通实现）
 
@@ -121,6 +136,6 @@ python scripts/eval_review_report.py               # 人审报告生成
 
 ---
 ## 确认门记录（S2 开始前填写）
-- 批准时间：
-- 批准指令原文：
-- TDD：否（普通实现；metrics 纯逻辑以固定用例单测保证，是否升级 TDD 由批准指令决定）
+- 批准时间：2026-11-13 11:20 前后 (+08:00)
+- 批准指令原文：「可以 先写runbook吧」（三项范围已先行确认：QASPER/BEIR/负面题全纳入）+「没问题 收尾立项吧 仔细一点」（5.8 看板纳入+三个执行细节按建议值锁定：faithfulness 全量/answer_relevancy 仅 D 档/噪声题双跑）
+- TDD：否（普通实现；metrics 纯逻辑以固定小用例单测保证——全项目测试密度最高处）
