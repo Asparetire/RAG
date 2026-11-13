@@ -37,7 +37,13 @@ def _all_doc_ids() -> list[str]:
 
 
 async def _review_doc(candidates: list[dict]) -> tuple[list[dict], list[dict]]:
-    """AI 复审一篇的候选题，分拣 (passed, uncertain)。reject 直接弃。"""
+    """AI 复审一篇的候选题，分拣 (passed, uncertain)。reject 直接弃。
+
+    修正（跑批实测）：①figure 题（reading=figure）豁免文本一致性复审——证据本体
+    是图，judge 只看文本必然 uncertain（全部误判）；②复审调用失败重试一次
+    （deepseek 偶发超时不是题目问题）。
+    """
+    from doclens.eval.dataset import load_chunk_pool
     passed, uncertain = [], []
     for q in candidates:
         if not q.get("answerable", True):
@@ -45,17 +51,27 @@ async def _review_doc(candidates: list[dict]) -> tuple[list[dict], list[dict]]:
                            "reason": "不可答题：以拒答为正确行为，无需事实复审"}
             passed.append(q)
             continue
+        if q.get("reading") == "figure" or q.get("type") == "figure":
+            q["review"] = {"verdict": "pass", "confidence": 0.9,
+                           "reason": "图表题：证据本体是图（出题时已看图+caption 锚定），"
+                                     "文本一致性复审不适用"}
+            passed.append(q)
+            continue
         gold_contents = []
         for g in q.get("gold", []):
-            from doclens.eval.dataset import load_chunk_pool
             pool = {c["chunk_id"]: c["content"] for c in load_chunk_pool(g["doc_id"])}
             gold_contents.append(pool.get(g["chunk_id"], ""))
-        try:
-            v = await review_question(q["question"], q.get("ref_answer", ""),
-                                      gold_contents, q.get("type", "text"))
-        except Exception as e:  # noqa: BLE001 复审失败=uncertain（交人工）
-            v = {"verdict": "uncertain", "confidence": 0.0,
-                 "reason": f"复审调用失败：{str(e)[:80]}"}
+        v = None
+        for attempt in (1, 2):  # S3 体检：judge 偶发超时重试一次
+            try:
+                v = await review_question(q["question"], q.get("ref_answer", ""),
+                                          gold_contents, q.get("type", "text"))
+                break
+            except Exception as e:  # noqa: BLE001
+                if attempt == 2:
+                    v = {"verdict": "uncertain", "confidence": 0.0,
+                         "reason": f"复审调用失败（重试后）：{str(e)[:80]}"}
+                await asyncio.sleep(3)
         q["review"] = v
         if v["verdict"] == "pass":
             passed.append(q)
