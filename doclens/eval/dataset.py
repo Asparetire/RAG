@@ -120,12 +120,13 @@ def anchor_check(ref_answer: str, gold_contents: list[str], min_ratio: float = 0
     hits = sum(1 for w in windows if w in joined)
     if hits / max(1, len(windows)) >= min_ratio:
         return True
-    # b) gold 3-gram 覆盖率（gold 的信息被 ref 覆盖）
+    # b) gold 3-gram 覆盖率（gold 的信息被 ref 覆盖）——改写形态实测水位 ~0.34
+    #    （0.6 会误杀；0.3 排除完全不相关 ref，试审批教训的校准值）
     gold_grams = {joined[i:i + 3] for i in range(max(0, len(joined) - 2))}
     if not gold_grams:
         return False
     covered = sum(1 for g in gold_grams if g in ref)
-    return covered / len(gold_grams) >= min_ratio
+    return covered / len(gold_grams) >= 0.3
 
 
 def anchor_via_quote(quote: str, gold_contents: list[str]) -> bool:
