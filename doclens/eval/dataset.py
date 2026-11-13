@@ -42,6 +42,7 @@ class EvalQuestion:
     pair_of: str | None = None
     origin: str = "vlm"             # vlm | smoke
     noise_variant: bool = False     # True=评测时注入噪声上下文
+    quote: str = ""                 # 原文依据句（VLM 逐字摘抄；锚定校验用）
     gold_hint: str = ""
     status: str = "candidate"       # candidate | approved | rejected | rewritten
 
@@ -103,16 +104,43 @@ def dedup_check(question: str, existing: list[str], threshold: float = 0.85) -> 
 
 
 def anchor_check(ref_answer: str, gold_contents: list[str], min_ratio: float = 0.6) -> bool:
-    """质量闸②：原文锚定——ref_answer 按 8 字符滑窗，≥min_ratio 的窗口能在
-    gold chunk 原文中命中（跨语言/词序差容忍）。"""
+    """质量闸②：原文锚定（双向）。
+
+    a) ref_answer 归一化 8 字符滑窗 ≥min_ratio 命中 gold 原文（ref 抄原文形态）；
+    b) 或 gold 原文的实词 3-gram 被 ref_answer 覆盖 ≥min_ratio（ref 归纳改写形态——
+       VLM 出题常态是改写而非抄写，单向滑窗会误杀，试审批 20/20 覆没的教训）。
+    """
     ref = _norm_text(ref_answer)
-    if len(ref) < 8:
-        return False
     joined = _norm_text(" ".join(gold_contents))
+    if len(ref) < 8 or not joined:
+        return False
+    # a) ref 滑窗命中 gold
     step = max(4, len(ref) // 12)
     windows = [ref[i:i + 8] for i in range(0, max(1, len(ref) - 7), step)]
     hits = sum(1 for w in windows if w in joined)
-    return hits / max(1, len(windows)) >= min_ratio
+    if hits / max(1, len(windows)) >= min_ratio:
+        return True
+    # b) gold 3-gram 覆盖率（gold 的信息被 ref 覆盖）
+    gold_grams = {joined[i:i + 3] for i in range(max(0, len(joined) - 2))}
+    if not gold_grams:
+        return False
+    covered = sum(1 for g in gold_grams if g in ref)
+    return covered / len(gold_grams) >= min_ratio
+
+
+def anchor_via_quote(quote: str, gold_contents: list[str]) -> bool:
+    """质量闸②增强：出题时要求 VLM 附**原文依据句**（quote，抄原文形态）——
+    依据句滑窗命中 gold 即锚定成立（比改写型 ref_answer 可靠）。"""
+    if not (quote or "").strip():
+        return False
+    joined = _norm_text(" ".join(gold_contents))
+    q = _norm_text(quote)
+    if len(q) < 8:
+        return False
+    step = max(4, len(q) // 10)
+    windows = [q[i:i + 8] for i in range(0, max(1, len(q) - 7), step)]
+    hits = sum(1 for w in windows if w in joined)
+    return hits / max(1, len(windows)) >= 0.7
 
 
 def bm25_pseudo_check(gold_rank: int, gold_score: float, runner_up: float | None,
@@ -167,8 +195,10 @@ def load_image_units(doc_id: str) -> list[dict]:
 
 _JSON_RULES = (
     "只输出一个 JSON 数组，不要解释、不要代码块围栏。"
-    "每个元素字段：question(字符串)、ref_answer(参考答案字符串)、"
-    "evidence_chunk_ids(支撑该题的 chunk_id 数组)、difficulty(\"direct\"或\"synthesis\")。"
+    "每个元素字段：question(字符串)、ref_answer(参考答案字符串，可同义改写)、"
+    "**quote(直接摘抄的原文依据句，逐字复制片段中的句子，不得改写)**、"
+    "evidence_chunk_ids(支撑该题的 chunk_id 数组)、"
+    "difficulty(\"direct\"或\"synthesis\")。"
 )
 
 _TEXT_PROMPT = (
@@ -235,7 +265,7 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
         return "\n\n".join(out)
 
     def _pick(pool_: list[dict], n: int) -> list[list[dict]]:
-        """把池子按相邻分组（每组 3 块）供出题轮转。"""
+        """把池子按相邻分组（试审批教训：3 块视野太窄 → 5 块）。"""
         groups = []
         for i in range(0, len(pool_), n):
             groups.append(pool_[i:i + n])
@@ -249,8 +279,8 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
             raw = await _chat_json(prompt, images=images)
         return raw if isinstance(raw, list) else []
 
-    # 1) 文本题（相邻 3 块一组，每组 1 题）
-    text_groups = _pick([c for c in pool if c["kind"] == "text"], 3)
+    # 1) 文本题（相邻 5 块一组，每组 1 题）
+    text_groups = _pick([c for c in pool if c["kind"] == "text"], 5)
     for g in text_groups[:per_type]:
         raw = await _ask(_TEXT_PROMPT.format(n=1, chunks=_fmt_chunks(g)))
         for item in raw[:1]:
@@ -260,7 +290,8 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
                 question=item.get("question", ""),
                 ref_answer=item.get("ref_answer", ""),
                 gold=[{"doc_id": doc_id, "chunk_id": cid} for cid in gold_ids],
-                difficulty=item.get("difficulty", "direct")))
+                difficulty=item.get("difficulty", "direct"),
+                quote=_extract_quote(item)))
 
     # 2) 表格题
     tables = [c for c in pool if c["kind"] == "table"]
@@ -271,7 +302,8 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
                 q_id="", type="table", lang="zh",
                 question=item.get("question", ""),
                 ref_answer=item.get("ref_answer", ""),
-                gold=[{"doc_id": doc_id, "chunk_id": t["chunk_id"]}]))
+                gold=[{"doc_id": doc_id, "chunk_id": t["chunk_id"]}],
+                quote=_extract_quote(item)))
             if len([c for c in candidates if c.type == "table"]) >= per_type:
                 break
 
@@ -304,7 +336,7 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
             gold_hint=item.get("trap_reason", "")))
 
     # 5) 噪声题（题面正常，评测时注噪）
-    noise_groups = _pick([c for c in pool if c["kind"] == "text"], 3)
+    noise_groups = _pick([c for c in pool if c["kind"] == "text"], 5)
     for g in noise_groups[:4]:
         raw = await _ask(_NOISE_PROMPT.format(n=1, chunks=_fmt_chunks(g)))
         for item in raw[:1]:
@@ -314,9 +346,11 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
                 ref_answer=item.get("ref_answer", ""),
                 gold=[{"doc_id": doc_id, "chunk_id": cid}
                       for cid in (item.get("evidence_chunk_ids") or [g[0]["chunk_id"]])],
-                noise_variant=True))
+                noise_variant=True,
+                quote=_extract_quote(item)))
 
-    # 锚定校验（质量闸②）：可回答题的 ref_answer 必须锚定 gold chunk 原文
+    # 锚定校验（质量闸②，试审批 20/20 覆没的修正）：
+    # 优先 quote 锚定（VLM 抄的原文依据句）→ 双向 ref 锚定兜底
     content_by_id = {c["chunk_id"]: c["content"] for c in pool}
     errors = []
     kept = []
@@ -326,11 +360,17 @@ async def generate_candidates_for_doc(doc_id: str, *, per_type: int = 6) -> dict
             continue
         if q.answerable and q.gold:
             contents = [content_by_id.get(g["chunk_id"], "") for g in q.gold]
-            if not anchor_check(q.ref_answer, contents):
+            anchored = (anchor_via_quote(q.quote, contents)
+                        or anchor_check(q.ref_answer, contents))
+            if not anchored:
                 errors.append(f"锚定失败弃: {q.question[:40]}")
                 continue
         kept.append(q)
     return {"doc_id": doc_id, "candidates": kept, "errors": errors}
+
+
+def _extract_quote(item: dict) -> str:
+    return item.get("quote") or item.get("evidence_quote") or ""
 
 
 # ---------- 持久化 ----------
