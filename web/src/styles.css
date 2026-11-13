@@ -265,25 +265,30 @@ body {
 .at-bar { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.6s; }
 .at-msg { color: var(--muted); font-size: 11px; }
 
-/* ============ 动效层（4.8 交互优化；J 线调研范式：CSS 优先、200ms ease-out、reduced-motion 降级） ============ */
+/* ============ 动效层（4.8 交互优化；J 线调研范式：CSS 优先零依赖，参数校准自
+   ai-chatbot globals.css / LobeChat panelSlide / open-webui flyAndScale） ============ */
+:root {
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);   /* ai-chatbot 主曲线（位移类） */
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);     /* LobeChat 面板曲线 */
+}
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-@keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(.97) } to { opacity: 1; transform: none } }
-@keyframes msgIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
-@keyframes slideInRight { from { opacity: 0; transform: translateX(28px) } to { opacity: 1; transform: none } }
+@keyframes popIn { from { opacity: 0; transform: translateY(8px) scale(0.95) } to { opacity: 1; transform: none } }
+@keyframes msgIn { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+@keyframes slideInRight { from { opacity: 0; transform: translateX(8px) } to { opacity: 1; transform: none } }
 @keyframes blink { 50% { opacity: 0 } }
 
-/* 消息入场：淡入+上移 10px，200ms（流式更新不重放——元素跨渲染持久） */
-.msg { animation: msgIn 0.2s ease-out both; }
+/* 消息入场：上浮 8px+淡入（ai-chatbot message-in 惯例；用户消息挂动画，流式助手消息自然生长） */
+.msg { animation: msgIn 0.3s var(--ease-spring) both; }
 /* 流式中的打字光标 */
 .msg.assistant.streaming .bubble.answer::after {
   content: '▍'; color: var(--accent); margin-left: 2px;
   animation: blink 1s steps(2) infinite;
 }
-/* 面板滑入：PDF 预览/侧栏/论文库 */
-.pdf-pane, .sidebar, .library { animation: slideInRight 0.24s ease-out both; }
+/* 面板滑入：LobeChat panelSlide 参数（位移 8px/0.28s/smooth） */
+.pdf-pane, .sidebar, .library { animation: slideInRight 0.28s var(--ease-smooth) both; }
 /* 视图切换淡入 */
-.chat, .library-main { animation: fadeIn 0.2s ease-out; }
-/* 卡片与行 hover 反馈 */
+.chat, .library-main { animation: fadeIn 0.2s var(--ease-smooth); }
+/* 卡片与行 hover 反馈（open-webui hover 150ms 惯例） */
 .source-card, .paper-table tbody tr, .cat-row, .suggestion { transition: background 0.15s ease-out, border-color 0.15s ease-out, box-shadow 0.15s ease-out; }
 .source-card:hover { transform: translateY(-1px); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.09); }
 /* 按钮/可点元素统一过渡 + 按压反馈 */
@@ -291,9 +296,9 @@ body {
   transition: background 0.15s ease-out, color 0.15s ease-out, border-color 0.15s ease-out, transform 0.1s ease-out;
 }
 .btn:active, .model-btn:active { transform: scale(0.97); }
-/* 弹窗：遮罩淡入 + 内容缩放上浮 */
+/* 弹窗：遮罩纯淡入 + 内容上浮 8px/缩放 0.95→1、200ms（open-webui flyAndScale 默认） */
 .modal-mask { animation: fadeIn 0.15s ease-out both; }
-.modal { animation: popIn 0.18s ease-out both; }
+.modal { animation: popIn 0.2s var(--ease-spring) both; }
 
 /* 弹窗样式（4.8 移动/新建/重命名） */
 .modal-mask {

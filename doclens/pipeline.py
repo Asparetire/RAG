@@ -73,18 +73,20 @@ def _load_image_blob(doc_id: str, image_path: str) -> bytes | None:
     真实位置 = data/parsed/{doc_id}/{image_path}（ingest._image_file 同款拼接，
     m4 修复：M3 版本漏拼 {doc_id} 段导致图文多模态输入静默失效——图表题一直
     靠 caption 文本代理答题，B 档语义掩盖了该缺陷；缺失容错保留，trace 可见）。
+    S4-11（M5 首项）：绝对路径不再放行——一律按相对语义解析并做包含性校验，
+    防 DB/Qdrant 被篡改时任意文件读。
     """
     if not doc_id or not image_path:
         return None
+    root = (PARSED_DIR / doc_id).resolve()
     p = Path(image_path)
-    if p.is_absolute():
-        try:
-            return p.read_bytes()
-        except OSError:
-            return None
-    p = PARSED_DIR / doc_id / image_path
+    candidate = p if p.is_absolute() else root / p
     try:
-        return p.read_bytes()
+        resolved = candidate.resolve()
+        # 包含性校验：必须位于该 doc 解析目录内（S4-11）
+        if not (resolved == root or root in resolved.parents):
+            return None
+        return resolved.read_bytes()
     except OSError:
         return None
 

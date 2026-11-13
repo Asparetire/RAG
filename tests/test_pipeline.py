@@ -97,5 +97,8 @@ def test_load_image_blob_doc_relative(monkeypatch, tmp_path):
     # 缺失容错：None 不炸主链路
     assert pipeline._load_image_blob(doc_id, "images/missing.jpg") is None
     assert pipeline._load_image_blob("", "images/p1.jpg") is None
-    # 绝对路径直读（防御性保留）
-    assert pipeline._load_image_blob(doc_id, str(img / "p1.jpg")) == b"\xff\xd8fake"
+    # S4-11：绝对路径逃逸被包含性校验拦截（不再放行）
+    assert pipeline._load_image_blob(doc_id, str(tmp_path / "outside" / "x.jpg")) is None
+    # 绝对路径但位于解析目录内 → 放行
+    inside_abs = tmp_path / "parsed" / doc_id / "images" / "p1.jpg"
+    assert pipeline._load_image_blob(doc_id, str(inside_abs)) == b"\xff\xd8fake"
