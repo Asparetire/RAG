@@ -89,6 +89,19 @@ DDL = [
         KEY idx_eval_run (run_id, profile)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评测与消融结果（M5 用，先建结构）'
     """,
+    # M5 跑批进度（m5-runbook 4.8 同款范式）：看板轮询 (run_id) 进度
+    """
+    CREATE TABLE IF NOT EXISTS t_eval_run (
+        run_id     VARCHAR(64)  NOT NULL PRIMARY KEY,
+        suite      VARCHAR(32)  NOT NULL COMMENT 'main/qasper/gen_model',
+        status     ENUM('running','completed','error') NOT NULL DEFAULT 'running',
+        total      INT          NOT NULL DEFAULT 0,
+        completed  INT          NOT NULL DEFAULT 0,
+        error      TEXT         NULL,
+        created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评测跑批进度（M5 看板轮询）'
+    """,
     # M3 重排结果缓存（m3-runbook K2，调研 R10）：键 = sha256(model+params+候选指纹+query)，
     # ranking = 重排后 chunk_id 有序列表 JSON——M5 消融跨配置重跑省钱+可复现（temp=0 非确定性兜底）
     """
@@ -140,7 +153,7 @@ DDL = [
 
 def main() -> int:
     expected = {"t_doc", "t_chunk", "t_embed_cache", "t_ctx_prefix", "t_eval_result",
-                "t_rerank_cache", "t_category", "t_ingest_task"}
+                "t_rerank_cache", "t_category", "t_ingest_task", "t_eval_run"}
     conn = connect()
     try:
         with conn.cursor() as cur:
@@ -150,6 +163,7 @@ def main() -> int:
             for alter in (
                 "ALTER TABLE t_doc ADD COLUMN category_id INT NULL",
                 "ALTER TABLE t_doc ADD COLUMN user_id VARCHAR(64) NULL",
+                "ALTER TABLE t_eval_result ADD COLUMN model VARCHAR(128) NULL",
             ):
                 try:
                     cur.execute(alter)
