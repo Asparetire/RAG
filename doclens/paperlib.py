@@ -358,7 +358,10 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
             doc_id = digest[:12]
             canonical = DATA_DIR / "pdfs" / f"{doc_id}.pdf"
             canonical.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(pdf_path, canonical)
+            # S3 体检：retry 时 pdf_path 即 canonical（重试传 canonical 路径）——
+            # 同文件不自拷（SameFileError）
+            if pdf_path.resolve() != canonical.resolve():
+                shutil.copy2(pdf_path, canonical)
             update_task(task_id, doc_id=doc_id, status="parsing", progress=0.05,
                         progress_msg="校验通过，开始解析")
             # 去重：t_doc 已有同 doc_id → 直接归档跳过解析
