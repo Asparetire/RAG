@@ -103,8 +103,6 @@ def _write_chunks(conn, doc: DoclensDoc, rows: list[tuple], doc_hash: str) -> No
     except Exception:
         conn.rollback()
         raise
-        with conn.cursor() as cur:
-
 def process_doc(client: EmbeddingClient, qclient, conn, doc_dir: Path, force: bool) -> dict:
     """处理单篇：返回统计 {doc_id, skipped, n_text, n_img, downsampled, written}（n-2：口径对齐实际键）。"""
     doc_json = doc_dir / "doc.json"
