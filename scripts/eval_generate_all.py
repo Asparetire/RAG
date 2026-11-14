@@ -101,6 +101,8 @@ async def main_async(force: bool) -> int:
                     "errors": result["errors"]}
         cands = data.get("candidates", [])
         passed, uncertain = await _review_doc(cands)
+        # 回写 review 结果到 candidates json（断点与审计需要——首次跑批遗漏，S3 式补）
+        out_file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         stats["docs"] += 1
         stats["candidates"] += len(cands)
         stats["pass"] += len(passed)
