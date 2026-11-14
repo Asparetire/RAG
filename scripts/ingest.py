@@ -104,22 +104,6 @@ def _write_chunks(conn, doc: DoclensDoc, rows: list[tuple], doc_hash: str) -> No
         conn.rollback()
         raise
         with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO t_doc (doc_id, title, doi, sha256, doc_hash, n_chunks) "
-                "VALUES (%s,%s,%s,%s,%s,%s) "
-                "ON DUPLICATE KEY UPDATE title=VALUES(title), doi=VALUES(doi), "
-                "sha256=VALUES(sha256), doc_hash=VALUES(doc_hash), n_chunks=VALUES(n_chunks)",
-                (doc.doc_id, doc.title, doc.doi, doc.sha256, doc_hash, len(rows)),
-            )
-            cur.execute("DELETE FROM t_chunk WHERE doc_id=%s", (doc.doc_id,))
-            cur.executemany(
-                "INSERT INTO t_chunk (chunk_id, doc_id, kind, content, page, bbox, "
-                "heading_path, image_path, caption, content_hash) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                rows,
-            )
-    # conn.begin() 上下文退出即提交；失败自动回滚，无需显式 commit/rollback
-
 
 def process_doc(client: EmbeddingClient, qclient, conn, doc_dir: Path, force: bool) -> dict:
     """处理单篇：返回统计 {doc_id, skipped, n_text, n_img, downsampled, written}（n-2：口径对齐实际键）。"""
