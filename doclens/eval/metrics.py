@@ -59,18 +59,24 @@ def _tokens(s: str) -> list[str]:
 
 
 def answer_f1(prediction: str, references: list[str]) -> float:
-    """SQuAD token-F1，多参考取 max（QASPER 口径 [K1]）。"""
+    """SQuAD token-F1，多参考取 max（QASPER 口径 [K1]）。
+
+    SQuAD 官方口径：common=按 token **计数的交集**（Counter）——用 set 会把重复
+    token（如 "the"×2）算一次，F1 系统性偏低（M5 单测实测抓到）。
+    """
     pt = _tokens(prediction)
     best = 0.0
     for ref in references:
         rt = _tokens(ref)
         if not pt or not rt:
             continue
-        common = set(pt) & set(rt)
+        from collections import Counter
+        pc, rc = Counter(pt), Counter(rt)
+        common = sum((pc & rc).values())  # 多重集合交集计数
         if not common:
             continue
-        precision = len(common) / len(pt)
-        recall = len(common) / len(rt)
+        precision = common / len(pt)
+        recall = common / len(rt)
         best = max(best, 2 * precision * recall / (precision + recall))
     return best
 
