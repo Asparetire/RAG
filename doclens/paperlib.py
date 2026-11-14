@@ -335,7 +335,16 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
 
     同步阻塞实现（线程内执行）：MinerU subprocess/嵌入调用都是慢 IO，线程足够；
     _INGEST_LOCK 串行化防并发重复建索引。异常 → status=error + error 文本。
+    线程入口先建独立事件循环（process_doc 内部用 asyncio.run 跑嵌入——宿主线程
+    若已有循环会 RuntimeError；M5 QASPER 批量入库实测发现）。
     """
+    import asyncio
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass  # 无循环（正常线程）
+    else:  # 线程带着循环被启动 → 换新循环
+        asyncio.set_event_loop(asyncio.new_event_loop())
     with _INGEST_LOCK:
         try:
             # 1) 校验 + sha256 去重 + **落 canonical**（S3 B-1：必须显式复制到
