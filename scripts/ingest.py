@@ -131,9 +131,12 @@ def process_doc(client: EmbeddingClient, qclient, conn, doc_dir: Path, force: bo
     # Qdrant 先删后插（变更文档）
     qs.delete_doc_points(qclient, doc.doc_id)
 
+    reused: list[bool] = []  # 降采样标记（M5 修复：原在 embed_all 闭包内定义，
+    # L151 外部引用必然 NameError——有图像文档的入库回归，M5 QASPER 跑批实测暴露）
+
     async def embed_all() -> tuple[list, list]:
         vecs_t = await client.embed_texts([c.content for c in text_units])
-        blobs, reused = [], []
+        blobs = []
         for _c, p in img_pairs:
             small = await asyncio.to_thread(_downsample_bytes, p)
             # m-9：回退分支的同步读同样经 to_thread（§3.1 纪律：同步 IO 不上事件循环）
