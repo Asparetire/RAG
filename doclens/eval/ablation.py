@@ -138,13 +138,22 @@ async def _split_statements(answer: str) -> list[str]:
 # ---------- 单题评测 ----------
 
 async def eval_one(question: str, profile: str, model: str | None,
-                   gold_chunk_ids: list[str], ref_answer: str,
+                   gold_chunk_ids: list, ref_answer: str,
                    answerable: bool) -> dict:
-    """跑一题 → 收集检索/生成/引用指标（非流式，on_event=None）。"""
+    """跑一题 → 收集检索/生成/引用指标（非流式，on_event=None）。
+
+    gold_chunk_ids：chunk_id 字符串列表或 {chunk_id} dict 列表（两种调用方兼容）。
+    """
     from doclens.eval import metrics as MT
     res = await run_pipeline(question, profile, on_event=None, stream_gen=False,
                              model=model, trace_on=True)
-    gold_set = {g["chunk_id"] for g in (gold_chunk_ids or []) if g.get("chunk_id")}
+    gold_set = set()
+    for g in (gold_chunk_ids or []):
+        if isinstance(g, dict):
+            if g.get("chunk_id"):
+                gold_set.add(g["chunk_id"])
+        elif g:
+            gold_set.add(g)
     ranked = []
     for r in res.get("refs", []):
         if r.chunk_id not in ranked:
