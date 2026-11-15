@@ -17,6 +17,7 @@ import SourceSidebar from './components/SourceSidebar.jsx'
 import PdfPane from './components/PdfPane.jsx'
 import LoginPage from './components/LoginPage.jsx'
 import PaperLibrary from './components/PaperLibrary.jsx'
+import EvalDashboard from './components/EvalDashboard.jsx'
 
 let _seq = 0
 const nextSeq = () => ++_seq
@@ -228,6 +229,8 @@ export default function App() {
                     onClick={() => setView('chat')}>对话</button>
             <button className={view === 'library' ? 'active' : ''}
                     onClick={() => setView('library')}>论文库</button>
+            <button className={view === 'eval' ? 'active' : ''}
+                    onClick={() => setView('eval')}>评测看板</button>
           </div>
           <button className="btn close" onClick={() => dispatch({ type: 'clear' })}
                   disabled={status === 'streaming'}>清空对话</button>
@@ -247,6 +250,8 @@ export default function App() {
             onOpenPaper={(p) => setLibraryPaper(p)}
             onAuthError={handleAuthError}
           />
+        ) : view === 'eval' ? (
+          <EvalDashboard onAuthError={handleAuthError} />
         ) : (
           <>
             <ChatPane

@@ -265,6 +265,17 @@ body {
 .at-bar { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.6s; }
 .at-msg { color: var(--muted); font-size: 11px; }
 
+/* 评测看板（5.8） */
+.eval-dash { flex: 1; display: flex; flex-direction: column; background: var(--panel); min-height: 0; }
+.eval-main { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.eval-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.eval-head h3 { margin: 0; }
+.eval-run-btns { display: flex; gap: 8px; }
+.eval-error { color: var(--danger); font-size: 12px; margin-bottom: 8px; }
+.runs-table { margin-bottom: 18px; }
+.summary-block h4 { margin: 0 0 8px; font-size: 13px; }
+.n-tag { font-size: 10px; color: var(--muted); }
+
 /* ============ 动效层（4.8 交互优化；J 线调研范式：CSS 优先零依赖，参数校准自
    ai-chatbot globals.css / LobeChat panelSlide / open-webui flyAndScale） ============ */
 :root {
