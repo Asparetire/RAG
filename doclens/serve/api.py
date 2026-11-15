@@ -34,6 +34,7 @@ import re
 import threading
 import time
 import uuid
+from collections import defaultdict
 from pathlib import Path
 from typing import Annotated
 
@@ -43,6 +44,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sse_starlette.sse import EventSourceResponse
 
 from doclens.config import DATA_DIR, MODELS, PROJECT_ROOT, PROFILES, settings
+from doclens.eval.ablation import load_suite, run_start, run_suite_async
+from doclens.index.db import connect
 from doclens.pipeline import run_pipeline
 from doclens.serve import auth
 from doclens.serve.assets import resolve_figure, resolve_pdf
@@ -337,6 +340,58 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
             return {"ok": True}
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
+
+    # ---- 评测看板（5.8；只读聚合+跑批触发）----
+    @protected.get("/api/eval/runs")
+    def api_eval_runs() -> list[dict]:
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT run_id, suite, status, total, completed, "
+                            "created_at, updated_at FROM t_eval_run ORDER BY created_at DESC")
+                return [{"run_id": r[0], "suite": r[1], "status": r[2], "total": r[3],
+                         "completed": r[4], "created_at": str(r[5]), "updated_at": str(r[6])}
+                        for r in cur.fetchall()]
+        finally:
+            conn.close()
+
+    @protected.get("/api/eval/summary")
+    def api_eval_summary(run_id: str):
+        """按 run 聚合：每 profile×metric 的均值+样本数（看板对比表数据源）。"""
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT profile, metric, AVG(value), COUNT(*) FROM t_eval_result "
+                    "WHERE run_id=%s GROUP BY profile, metric ORDER BY profile, metric",
+                    (run_id,))
+                rows = cur.fetchall()
+        finally:
+            conn.close()
+        agg = defaultdict(list)
+        for profile, metric, avg, n in rows:
+            agg[profile].append({"metric": metric, "mean": round(float(avg), 4), "n": n})
+        return {"run_id": run_id, "profiles": agg}
+
+    @protected.get("/api/eval/attribution")
+    def api_eval_attribution(run_id: str):
+        """归因分布（attribution 产出后接通；当前返回占位结构）。"""
+        return {"run_id": run_id, "stages": {}, "note": "attribution.py 集成后填充"}
+
+    @protected.post("/api/eval/run")
+    def api_eval_run(body: dict):
+        """触发跑批（后台线程；suite=main/qasper/gen_model，profiles 逗号分隔）。"""
+        suite = body.get("suite") or "main"
+        if suite not in ("main", "qasper", "gen_model"):
+            raise HTTPException(status_code=422, detail="unknown suite")
+        profiles = (body.get("profiles") or "D").split(",")
+        run_id = f"{suite}-{time.strftime('%Y%m%d-%H%M%S')}"
+        questions_n = len(load_suite(suite)) if suite != "gen_model" else 100
+        run_start(run_id, suite, questions_n * len(profiles))
+        threading.Thread(
+            target=lambda: run_suite_async(suite, profiles, None),
+            daemon=True, name=f"eval-{run_id}").start()
+        return {"run_id": run_id, "status": "started"}
 
     # ---- SPA 托管（交付形态，K2/R1）：显式开关 WEB_STATIC=1 才挂（dev 期 dist 存在
     # 也不干扰 /api）；fastapi>=0.162 官方 frontend()，fallback=auto 即 history fallback
