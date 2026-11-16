@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1300" height="720" viewBox="0 0 13 7.2" font-family="'Segoe UI','Microsoft YaHei',sans-serif">
+  <rect width="13" height="7.2" fill="#f8fafc"/>
+  <text x="6.5" y="0.45" text-anchor="middle" font-size="0.32" font-weight="bold" fill="#1c2333">DocLens · 多模态论文问答 RAG</text>
+  <text x="6.5" y="0.68" text-anchor="middle" font-size="0.17" fill="#475569">MinerU 解析 → 四类分块 → 三路混合检索 → LLM 重排 → VLM 带引用生成 → 原页 bbox 高亮</text>
+
+  <!-- 用户层 -->
+  <rect x="0.3" y="5.2" width="2.4" height="1.2" rx="0.08" fill="#e8f0fe" stroke="#64748b"/>
+  <text x="1.5" y="5.55" text-anchor="middle" font-size="0.2" font-weight="bold" fill="#1c2333">用户（浏览器）</text>
+  <text x="1.5" y="5.85" text-anchor="middle" font-size="0.15" fill="#475569">React 前端（流式对话）</text>
+  <text x="1.5" y="6.1" text-anchor="middle" font-size="0.15" fill="#475569">论文库 / 评测看板</text>
+  <text x="1.5" y="6.35" text-anchor="middle" font-size="0.15" fill="#475569">登录门 JWT+cookie</text>
+
+  <!-- 应用层 -->
+  <rect x="3.3" y="4.9" width="3.0" height="1.6" rx="0.08" fill="#dbeafe" stroke="#64748b"/>
+  <text x="4.8" y="5.25" text-anchor="middle" font-size="0.2" font-weight="bold" fill="#1c2333">FastAPI 服务层</text>
+  <text x="4.8" y="5.6" text-anchor="middle" font-size="0.15" fill="#475569">POST /api/query (SSE)</text>
+  <text x="4.8" y="5.85" text-anchor="middle" font-size="0.15" fill="#475569">论文库/上传/评测看板 API</text>
+  <text x="4.8" y="6.1" text-anchor="middle" font-size="0.15" fill="#475569">登录门 argon2+JWT</text>
+
+  <!-- 管线层 -->
+  <rect x="3.3" y="2.9" width="3.0" height="1.5" rx="0.08" fill="#dcfce7" stroke="#64748b"/>
+  <text x="4.8" y="3.25" text-anchor="middle" font-size="0.2" font-weight="bold" fill="#1c2333">检索+生成管线</text>
+  <text x="4.8" y="3.55" text-anchor="middle" font-size="0.15" fill="#475569">router：zh 旁路 BM25</text>
+  <text x="4.8" y="3.8" text-anchor="middle" font-size="0.15" fill="#475569">hybrid：三路召回+RRF 融合</text>
+  <text x="4.8" y="4.05" text-anchor="middle" font-size="0.15" fill="#475569">rerank：LLM 重排（可降级）</text>
+  <text x="4.8" y="4.3" text-anchor="middle" font-size="0.15" fill="#475569">vlm：glm-5.3-flash 带引用</text>
+
+  <!-- 解析层 -->
+  <rect x="0.3" y="2.9" width="2.4" height="1.5" rx="0.08" fill="#dcfce7" stroke="#64748b"/>
+  <text x="1.5" y="3.25" text-anchor="middle" font-size="0.2" font-weight="bold" fill="#1c2333">MinerU 解析</text>
+  <text x="1.5" y="3.55" text-anchor="middle" font-size="0.15" fill="#475569">mineru-kit（独立环境）</text>
+  <text x="1.5" y="3.8" text-anchor="middle" font-size="0.15" fill="#475569">文本/表格/图注/图像</text>
+  <text x="1.5" y="4.05" text-anchor="middle" font-size="0.15" fill="#475569">doc.json + tables_manifest</text>
+
+  <!-- 存储层 -->
+  <rect x="7.0" y="2.9" width="2.8" height="1.5" rx="0.08" fill="#fef9c3" stroke="#64748b"/>
+  <text x="8.4" y="3.25" text-anchor="middle" font-size="0.2" font-weight="bold" fill="#1c2333">MySQL doclens</text>
+  <text x="8.4" y="3.55" text-anchor="middle" font-size="0.15" fill="#475569">t_doc / t_chunk（bbox 0-1）</text>
+  <text x="8.4" y="3.8" text-anchor="middle" font-size="0.15" fill="#475569">t_eval_result / t_ingest_task</text>
+
+  <rect x="10.2" y="2.9" width="2.6" height="1.5" rx="0.08" fill="#fef9c3" stroke="#64748b"/>
+  <text x="11.5" y="3.25" text-anchor="middle" font-size="0.2" font-weight="bold" fill="#1c2333">Qdrant</text>
+  <text x="11.5" y="3.55" text-anchor="middle" font-size="0.15" fill="#475569">doclens_text 1184+</text>
+  <text x="11.5" y="3.8" text-anchor="middle" font-size="0.15" fill="#475569">doclens_image 329+</text>
+  <text x="11.5" y="4.05" text-anchor="middle" font-size="0.15" fill="#475569">uuid5 幂等</text>
+
+  <rect x="7.0" y="5.2" width="2.8" height="1.2" rx="0.08" fill="#fef9c3" stroke="#64748b"/>
+  <text x="8.4" y="5.55" text-anchor="middle" font-size="0.2" font-weight="bold" fill="#1c2333">BM25（jieba）</text>
+  <text x="8.4" y="5.85" text-anchor="middle" font-size="0.15" fill="#475569">全量 pickle 索引</text>
+  <text x="8.4" y="6.1" text-anchor="middle" font-size="0.15" fill="#475569">每入库重建</text>
+
+  <rect x="10.2" y="5.2" width="2.6" height="1.2" rx="0.08" fill="#fef9c3" stroke="#64748b"/>
+  <text x="11.5" y="5.55" text-anchor="middle" font-size="0.2" font-weight="bold" fill="#1c2333">评测体系（M5）</text>
+  <text x="11.5" y="5.85" text-anchor="middle" font-size="0.15" fill="#475569">自建 126 题 + QASPER 71</text>
+  <text x="11.5" y="6.1" text-anchor="middle" font-size="0.15" fill="#475569">BEIR SciFact nDCG 0.736</text>
+
+  <!-- 连线 -->
+  <line x1="2.7" y1="5.8" x2="3.3" y2="5.7" stroke="#1d4ed8" stroke-width="1.4" marker-end="url(#a)"/>
+  <line x1="4.8" y1="4.9" x2="4.8" y2="4.4" stroke="#1d4ed8" stroke-width="1.4"/>
+  <line x1="4.8" y1="2.9" x2="4.0" y2="3.4" stroke="#1d4ed8" stroke-width="1.4"/>
+  <line x1="6.3" y1="5.6" x2="7.0" y2="5.8" stroke="#1d4ed8" stroke-width="1.4"/>
+  <line x1="6.3" y1="3.6" x2="7.0" y2="3.6" stroke="#1d4ed8" stroke-width="1.4"/>
+  <line x1="6.3" y1="3.3" x2="10.2" y2="3.5" stroke="#1d4ed8" stroke-width="1.4"/>
+  <text x="2.95" y="5.62" font-size="0.14" fill="#475569">SSE</text>
+  <text x="6.45" y="5.55" font-size="0.14" fill="#475569">BM25</text>
+  <text x="6.45" y="3.45" font-size="0.14" fill="#475569">SQL/向量</text>
+
+  <!-- 底部注记 -->
+  <text x="6.5" y="6.75" text-anchor="middle" font-size="0.16" fill="#475569">部署拓扑：服务器容器（应用+MinerU+MySQL+Qdrant）· Windows 侧开发（VS Code Remote-SSH）</text>
+  <text x="6.5" y="7.0" text-anchor="middle" font-size="0.16" fill="#475569">交付：git clone → cp .env.example .env → bash scripts/start_server.sh → http://&lt;IP&gt;:8000</text>
+
+  <defs>
+    <marker id="a" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="#1d4ed8"/>
+    </marker>
+  </defs>
+</svg>
