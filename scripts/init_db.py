@@ -160,9 +160,12 @@ def main() -> int:
             for ddl in DDL:
                 cur.execute(ddl)
             # 幂等补列（4.8）：t_doc 加 category_id/user_id（ALTER 失败=列已存在则忽略）
+            # m6-trash：deleted_at（垃圾桶软删标记，NULL=正常）/deleted_by（操作者）
             for alter in (
                 "ALTER TABLE t_doc ADD COLUMN category_id INT NULL",
                 "ALTER TABLE t_doc ADD COLUMN user_id VARCHAR(64) NULL",
+                "ALTER TABLE t_doc ADD COLUMN deleted_at DATETIME NULL",
+                "ALTER TABLE t_doc ADD COLUMN deleted_by VARCHAR(64) NULL",
                 "ALTER TABLE t_eval_result ADD COLUMN model VARCHAR(128) NULL",
             ):
                 try:

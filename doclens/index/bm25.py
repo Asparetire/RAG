@@ -91,6 +91,18 @@ def load_index(rebuild: bool = False) -> Bm25Index:
     return Bm25Index(chunk_ids=data["chunk_ids"], corpus=data["corpus"]).build()
 
 
+def bm25_rebuild() -> dict:
+    """全量重建（单一事实源 t_chunk → pickle），返回单元数。
+
+    删除/恢复/入库四处共用（m6-trash D5：消重复——三连原内联在 paperlib._run_ingest）。
+    """
+    units = load_units_from_db()
+    idx = build_index(units)
+    save_index(idx, meta_rows=[{"chunk_id": u["chunk_id"], "doc_id": u["doc_id"],
+                                "kind": u["kind"]} for u in units])
+    return {"units": len(units)}
+
+
 def load_units_from_db(doc_ids: list[str] | None = None) -> list[dict]:
     """从 t_chunk 读文本单元（重建式增量的语料源——单一事实源，§3.1）。"""
     from doclens.index.db import connect

@@ -92,6 +92,9 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState(null)
   const [pendingFile, setPendingFile] = useState(null)
+  // 垃圾桶（m6-trash）：软删列表 + 恢复/彻底删除/清空
+  const [trash, setTrash] = useState([])
+  const [trashBusy, setTrashBusy] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -107,6 +110,17 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
   }, [onAuthError])
 
   useEffect(() => { load() }, [load])
+
+  const loadTrash = useCallback(async () => {
+    try {
+      const r = await authedFetch('/api/papers/trash')
+      if (r.status === 401) throw new AuthError('请重新登录')
+      const data = await r.json()
+      setTrash(data.papers || [])
+    } catch (e) {
+      if (e instanceof AuthError) onAuthError(e)
+    }
+  }, [onAuthError])
 
   // 轮询：只要有进行中任务或刚提交的 batch，就每 2.5s 刷新一次（全部终态即停）
   const hasActive = activeTasks.length > 0
@@ -172,6 +186,9 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title: modal.name }),
         })
+      } else if (modal.kind === 'del') {
+        // 删除进垃圾桶（m6-trash）：软删，垃圾桶内可恢复
+        r = await authedFetch(`/api/papers/${modal.paper.doc_id}`, { method: 'DELETE' })
       }
       const d = await r.json()
       if (!r.ok) { setModal({ ...modal, error: d.detail || '操作失败' }); return }
@@ -189,6 +206,46 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
     if (!r.ok) { const d = await r.json(); window.alert(d.detail || '删除失败') }
     if (activeCat === node.id) setActiveCat(null)
     load()
+  }
+
+  // ---- 垃圾桶操作（m6-trash）：恢复 / 彻底删除 / 清空 ----
+  const restorePaper = async (docId) => {
+    setTrashBusy(true)
+    try {
+      const r = await authedFetch(`/api/papers/${docId}/restore`, { method: 'POST' })
+      const d = await r.json()
+      if (!r.ok) window.alert(d.detail || '恢复失败')
+      loadTrash(); load()
+    } catch (e) {
+      if (e instanceof AuthError) { onAuthError(e); return }
+    } finally { setTrashBusy(false) }
+  }
+
+  const purgePaper = async (p) => {
+    if (!window.confirm(`彻底删除「${p.title}」？此操作不可恢复（PDF 原件将移入 data/trash_files/ 兜底）。`)) return
+    setTrashBusy(true)
+    try {
+      const r = await authedFetch(`/api/papers/${p.doc_id}/purge`, { method: 'DELETE' })
+      const d = await r.json()
+      if (!r.ok) window.alert(d.detail || '彻底删除失败')
+      loadTrash(); load()
+    } catch (e) {
+      if (e instanceof AuthError) { onAuthError(e); return }
+    } finally { setTrashBusy(false) }
+  }
+
+  const emptyTrash = async () => {
+    if (!window.confirm(`清空垃圾桶（${trash.length} 篇）？彻底删除不可恢复。`)) return
+    setTrashBusy(true)
+    try {
+      const r = await authedFetch('/api/papers/trash/empty', { method: 'POST' })
+      const d = await r.json()
+      if (!r.ok) window.alert(d.detail || '清空失败')
+      else if (d.purged < trash.length) window.alert(`部分失败：清空了 ${d.purged}/${trash.length} 篇（其余正在入库或出错，稍后重试）`)
+      loadTrash(); load()
+    } catch (e) {
+      if (e instanceof AuthError) { onAuthError(e); return }
+    } finally { setTrashBusy(false) }
   }
 
   // 分类扁平化（带层级缩进）——下拉选项用
@@ -212,7 +269,10 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
       <aside className="library-tree">
         <div className="library-tree-head">
           <span>论文库</span>
-          <button className="btn close" onClick={() => setModal({ kind: 'new', parentId: null, name: '' })}>新建分类</button>
+          <span className="topbar-actions">
+            <button className="btn close" onClick={() => { setModal({ kind: 'trash' }); loadTrash() }}>垃圾桶</button>
+            <button className="btn close" onClick={() => setModal({ kind: 'new', parentId: null, name: '' })}>新建分类</button>
+          </span>
         </div>
         <CategoryTree
           categories={categories}
@@ -280,6 +340,8 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
                   <button className="link-btn"
                           onClick={() => setModal({ kind: 'move', paper: p, catId: p.category_id != null ? String(p.category_id) : '' })}>
                     移动</button>
+                  {' '}
+                  <button className="link-btn" onClick={() => setModal({ kind: 'del', paper: p })}>删除</button>
                 </td>
               </tr>
             ))}
@@ -338,14 +400,58 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
                          onChange={(e) => setModal({ ...modal, name: e.target.value })} />
                 </>
               )}
+              {modal.kind === 'del' && (
+                <>
+                  <h4>删除论文</h4>
+                  <div className="modal-paper">{modal.paper.title}</div>
+                  <div className="modal-paper">删除后进入<b>垃圾桶</b>：问答与论文列表立即不可见，随时可恢复；彻底删除请到垃圾桶操作。</div>
+                </>
+              )}
+              {modal.kind === 'trash' && (
+                <>
+                  <h4>垃圾桶（{trash.length}）</h4>
+                  {trash.length === 0 && <div className="modal-paper">垃圾桶是空的——删除的论文会出现在这里，保留至被彻底删除。</div>}
+                  {trash.length > 0 && (
+                    <table className="paper-table">
+                      <tbody>
+                        {trash.map((p) => (
+                          <tr key={p.doc_id}>
+                            <td>
+                              <div>{p.title}</div>
+                              <div className="paper-docid">
+                                {p.doc_id} · {p.n_chunks} 块 · 删除于 {String(p.deleted_at || '').slice(0, 16).replace('T', ' ')}
+                              </div>
+                            </td>
+                            <td style={{ whiteSpace: 'nowrap' }}>
+                              <button className="link-btn" disabled={trashBusy}
+                                      onClick={() => restorePaper(p.doc_id)}>恢复</button>
+                              {' '}
+                              <button className="link-btn" disabled={trashBusy}
+                                      onClick={() => purgePaper(p)}>彻底删除</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </>
+              )}
               {modal.error && <div className="modal-error">{modal.error}</div>}
               <div className="modal-actions">
-                <button className="btn close" onClick={closeModal}>取消</button>
-                <button className="btn send"
-                        disabled={modal.kind !== 'move' && !(modal.name || '').trim()}
-                        onClick={submitModal}>
-                  {modal.kind === 'move' ? '移动' : modal.kind === 'new' ? '创建' : '保存'}
+                <button className="btn close" onClick={closeModal}>
+                  {modal.kind === 'trash' ? '关闭' : '取消'}
                 </button>
+                {modal.kind === 'trash' && trash.length > 0 && (
+                  <button className="btn stop" disabled={trashBusy} onClick={emptyTrash}>清空垃圾桶</button>
+                )}
+                {modal.kind !== 'trash' && (
+                  <button className="btn send"
+                          disabled={modal.kind !== 'move' && modal.kind !== 'del' && !(modal.name || '').trim()}
+                          onClick={submitModal}>
+                    {modal.kind === 'del' ? '删除'
+                      : modal.kind === 'move' ? '移动' : modal.kind === 'new' ? '创建' : '保存'}
+                  </button>
+                )}
               </div>
             </div>
           </div>

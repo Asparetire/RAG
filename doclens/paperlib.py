@@ -182,7 +182,8 @@ def delete_category(cat_id: int) -> None:
         with conn.cursor() as cur:
             if _subtree_ids(cur, cat_id) - {cat_id}:
                 raise ValueError("请先删除/移出子分类")
-            cur.execute("SELECT COUNT(*) FROM t_doc WHERE category_id=%s", (cat_id,))
+            cur.execute("SELECT COUNT(*) FROM t_doc WHERE category_id=%s AND deleted_at IS NULL",
+                        (cat_id,))
             if cur.fetchone()[0]:
                 raise ValueError("分类下仍有论文，请先移动论文")
             cur.execute("DELETE FROM t_category WHERE id=%s", (cat_id,))
@@ -236,10 +237,26 @@ def list_papers(user_id: str | None = None) -> list[dict]:
                 "(SELECT t.status FROM t_ingest_task t WHERE t.doc_id=d.doc_id "
                 " ORDER BY t.id DESC LIMIT 1) AS last_status "
                 "FROM t_doc d LEFT JOIN t_category c ON c.id=d.category_id "
+                "WHERE d.deleted_at IS NULL "
                 "ORDER BY d.doc_id")
             return [{"doc_id": r[0], "title": r[1] or r[0], "n_chunks": r[2],
                      "category_id": r[3], "category_name": r[4],
                      "status": r[5] or "completed"}
+                    for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def list_trash() -> list[dict]:
+    """垃圾桶清单（m6-trash）：仅已删除文档，按删除时间倒序。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT doc_id, title, n_chunks, category_id, deleted_at "
+                "FROM t_doc WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
+            return [{"doc_id": r[0], "title": r[1] or r[0], "n_chunks": r[2],
+                     "category_id": r[3], "deleted_at": r[4]}
                     for r in cur.fetchall()]
     finally:
         conn.close()
@@ -342,6 +359,150 @@ def sweep_stale_tasks() -> int:
         conn.close()
 
 
+# ---------- 论文删除与回收站（m6-trash；方案 B：软删+检索面移除） ----------
+
+_ACTIVE_TASK_STATUSES = ("queued", "parsing", "indexing")
+
+
+def _get_doc_row(doc_id: str):
+    """(doc_id, deleted_at) 或 None（含 12 位十六进制格式守卫）。"""
+    import re
+
+    if not re.fullmatch(r"[0-9a-f]{12}", doc_id or ""):
+        return None
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT doc_id, deleted_at FROM t_doc WHERE doc_id=%s", (doc_id,))
+            return cur.fetchone()
+    finally:
+        conn.close()
+
+
+def _raise_if_ingesting(doc_id: str) -> None:
+    """R5 守卫：最新入库任务进行中 → 拒绝删除/清理（防与入库线程竞争）。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT status FROM t_ingest_task WHERE doc_id=%s ORDER BY id DESC LIMIT 1",
+                (doc_id,))
+            row = cur.fetchone()
+    finally:
+        conn.close()
+    if row and row[0] in _ACTIVE_TASK_STATUSES:
+        raise ValueError("该论文正在入库（排队/解析/索引中），请稍后再操作")
+
+
+def soft_delete_doc(doc_id: str, user_id: str | None = None) -> dict:
+    """删除进垃圾桶（m6-trash D2）：摘检索面（Qdrant 点位+BM25 重建）→ 打 deleted_at 标记。
+
+    DB 行与磁盘资产（data/pdfs 原件、data/parsed 产物）**原地保留**——垃圾桶期内可随时
+    恢复（paperless-ngx 同款语义）。标记最后打：前两步幂等可重放，中途失败重试无害；
+    已在垃圾桶 → 幂等返回不动检索面。
+    """
+    row = _get_doc_row(doc_id)
+    if row is None:
+        raise ValueError("论文不存在")
+    if row[1] is not None:
+        return {"ok": True, "already": True}
+    with _INGEST_LOCK:
+        _raise_if_ingesting(doc_id)
+        # 1) 摘检索面（幂等）
+        from doclens.index import bm25 as B
+        from doclens.index import qdrant_store as qs
+        qclient = qs._client()
+        try:
+            removed = qs.delete_doc_points(qclient, doc_id)
+        finally:
+            qclient.close()
+        B.bm25_rebuild()
+        # 2) 打标记（最后一步）
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE t_doc SET deleted_at=CURRENT_TIMESTAMP, deleted_by=%s "
+                    "WHERE doc_id=%s AND deleted_at IS NULL",
+                    (user_id, doc_id))
+        finally:
+            conn.close()
+    return {"ok": True, "removed_points": removed}
+
+
+def restore_doc(doc_id: str) -> dict:
+    """从垃圾桶恢复（m6-trash D3）：重放索引入库 → 清 deleted_at。
+
+    嵌入缓存按内容哈希命中 → 零 API 费用；BM25 全量重建秒级。清标记放最后：
+    论文"出现即完整"（列表可见时检索已可用，与删除的摘除顺序对称）。
+    """
+    row = _get_doc_row(doc_id)
+    if row is None:
+        raise ValueError("论文不存在")
+    if row[1] is None:
+        raise ValueError("该论文不在垃圾桶中")
+    with _INGEST_LOCK:
+        from doclens.index import bm25 as B
+        from doclens.index import qdrant_store as qs
+        parsed_root = PARSED_DIR / doc_id
+        from doclens.index.embeddings import EmbeddingClient
+        from scripts.ingest import process_doc
+        client = EmbeddingClient()
+        qclient = qs._client()
+        conn = connect()
+        try:
+            qs.ensure_collections(qclient)
+            process_doc(client, qclient, conn, parsed_root, force=False)
+        finally:
+            conn.close()
+            qclient.close()
+        B.bm25_rebuild()
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE t_doc SET deleted_at=NULL WHERE doc_id=%s", (doc_id,))
+        finally:
+            conn.close()
+        pdf_ok = (DATA_DIR / "pdfs" / f"{doc_id}.pdf").is_file()
+    return {"ok": True, "pdf_ok": pdf_ok}
+
+
+def purge_doc(doc_id: str) -> dict:
+    """彻底删除（m6-trash D4，唯一不可逆边界）：清库 → 删解析产物 → PDF 移 trash_files 兜底。
+
+    Qdrant 删除幂等重放（防软删中断残留）；DB 三步一事务（t_doc 删除经 FK 级联清
+    t_chunk），文件操作在提交后执行（失败留孤儿文件仅日志，重试幂等清理）。
+    """
+    row = _get_doc_row(doc_id)
+    if row is None:
+        raise ValueError("论文不存在")
+    if row[1] is None:
+        raise ValueError("该论文不在垃圾桶中（须先删除进垃圾桶，再彻底删除）")
+    with _INGEST_LOCK:
+        from doclens.index import qdrant_store as qs
+        qclient = qs._client()
+        try:
+            qs.delete_doc_points(qclient, doc_id)
+        finally:
+            qclient.close()
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM t_doc WHERE doc_id=%s", (doc_id,))
+                cur.execute("DELETE FROM t_ctx_prefix WHERE chunk_id LIKE %s", (f"{doc_id}:%",))
+                cur.execute("DELETE FROM t_ingest_task WHERE doc_id=%s", (doc_id,))
+            conn.commit()
+        finally:
+            conn.close()
+        shutil.rmtree(PARSED_DIR / doc_id, ignore_errors=True)
+        pdf = DATA_DIR / "pdfs" / f"{doc_id}.pdf"
+        if pdf.is_file():
+            backup_dir = DATA_DIR / "trash_files"
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(pdf), str(backup_dir / f"{doc_id}.pdf"))
+    return {"ok": True}
+
+
 # ---------- 单篇入库编排（复用 M1/M2 零件） ----------
 
 def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
@@ -417,12 +578,9 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
                 conn.close()
                 qclient.close()
 
-            # 4) BM25 全量重建（~1500 块秒级）
+            # 4) BM25 全量重建（~1500 块秒级；m6-trash D5：三连抽公共函数）
             from doclens.index import bm25 as B
-            units = B.load_units_from_db()
-            idx = B.build_index(units)
-            B.save_index(idx, meta_rows=[{"chunk_id": u["chunk_id"], "doc_id": u["doc_id"],
-                                          "kind": u["kind"]} for u in units])
+            B.bm25_rebuild()
 
             # 5) 分类归属 + 完成态
             if category_id:

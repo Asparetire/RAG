@@ -176,7 +176,8 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         conn = connect()
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT doc_id, title, n_chunks FROM t_doc ORDER BY doc_id")
+                cur.execute("SELECT doc_id, title, n_chunks FROM t_doc "
+                            "WHERE deleted_at IS NULL ORDER BY doc_id")
                 return [{"doc_id": r[0], "title": r[1], "n_chunks": r[2]}
                         for r in cur.fetchall()]
         finally:
@@ -244,18 +245,21 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         err = paperlib.validate_upload(file.filename or "", len(contents))
         if err:
             raise HTTPException(status_code=422, detail=err)
-        # sha256 去重前置检查（文件级，秒回常见重复）
+        # sha256 去重前置检查（文件级，秒回常见重复；m6-trash：区分"在垃圾桶"给恢复引导）
         import hashlib
         doc_id = hashlib.sha256(contents).hexdigest()[:12]
         from doclens.index.db import connect
         conn = connect()
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM t_doc WHERE doc_id=%s", (doc_id,))
-                dup = cur.fetchone()[0]
+                cur.execute("SELECT deleted_at FROM t_doc WHERE doc_id=%s", (doc_id,))
+                dup = cur.fetchone()
         finally:
             conn.close()
         if dup:
+            if dup[0] is not None:
+                raise HTTPException(status_code=409,
+                                    detail=f"该论文在垃圾桶中，请先恢复后再上传（与 {doc_id} 同内容）")
             raise HTTPException(status_code=409, detail=f"与已入库论文 {doc_id} 内容相同（sha256 重复）")
 
         batch_id = uuid.uuid4().hex
@@ -348,6 +352,48 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         try:
             paperlib.rename_paper(doc_id, body.get("title"))
             return {"ok": True}
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    # ---- 删除与回收站（m6-trash；方案 B：软删+检索面移除，调研 P1 paperless 语义）----
+    @protected.get("/api/papers/trash")
+    def api_papers_trash():
+        from doclens import paperlib
+        return {"papers": paperlib.list_trash()}
+
+    @protected.post("/api/papers/trash/empty")
+    def api_papers_trash_empty():
+        from doclens import paperlib
+        n = 0
+        for item in paperlib.list_trash():
+            try:
+                paperlib.purge_doc(item["doc_id"])
+                n += 1
+            except ValueError:
+                pass  # 单篇失败（如正在入库）不拖垮清空，逐篇继续
+        return {"ok": True, "purged": n}
+
+    @protected.delete("/api/papers/{doc_id}")
+    def api_paper_delete(doc_id: str):
+        from doclens import paperlib
+        try:
+            return paperlib.soft_delete_doc(doc_id)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    @protected.post("/api/papers/{doc_id}/restore")
+    def api_paper_restore(doc_id: str):
+        from doclens import paperlib
+        try:
+            return paperlib.restore_doc(doc_id)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
+    @protected.delete("/api/papers/{doc_id}/purge")
+    def api_paper_purge(doc_id: str):
+        from doclens import paperlib
+        try:
+            return paperlib.purge_doc(doc_id)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 
