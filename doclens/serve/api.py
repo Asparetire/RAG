@@ -219,6 +219,16 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
                     "启动扫描：%d 个超时任务标记为 failed", swept)
         except Exception:  # noqa: BLE001 扫描失败不阻塞启动（表未建等场景）
             logging.getLogger("uvicorn.error").exception("启动扫描失败")
+        # 2026-11-16：评测跑批同款兜底——daemon 线程不跨重启，遗留 running 标 error
+        # （实证：gen_model-20261116-145758 被 15:03 重启击杀后永挂 running 0/100）
+        from doclens.eval import ablation as eval_ablation
+        try:
+            swept_eval = eval_ablation.sweep_stale_runs()
+            if swept_eval:
+                logging.getLogger("uvicorn.error").warning(
+                    "启动扫描：%d 个遗留评测跑批标记为 error", swept_eval)
+        except Exception:  # noqa: BLE001 扫描失败不阻塞启动（表未建等场景）
+            logging.getLogger("uvicorn.error").exception("评测跑批启动扫描失败")
 
     # ---- 存活探针（公开组）----
     @app.get("/api/health")

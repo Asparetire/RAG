@@ -90,6 +90,26 @@ def run_finish(run_id: str, status: str, error: str | None = None) -> None:
         conn.close()
 
 
+def sweep_stale_runs() -> int:
+    """启动清理：遗留 running 行标记为 error（跑批线程是进程内 daemon，不跨重启）。
+
+    uvicorn 重启后旧跑批线程必死，t_eval_run 若不清理会永远显示 running——
+    2026-11-16 实证：gen_model-20261116-145758 被 15:03 的服务重启击杀，卡 0/100 永挂。
+    与 paperlib.sweep_stale_tasks（S3 M-5 上传任务启动扫描）同款思路。返回受影响行数。
+    """
+    conn = _conn()
+    try:
+        with conn.cursor() as cur:
+            n = cur.execute(
+                "UPDATE t_eval_run SET status=%s, error=%s, "
+                "updated_at=CURRENT_TIMESTAMP WHERE status='running'",
+                ("error", "服务重启，跑批中断（进程内线程不跨重启）"))
+        conn.commit()
+        return n
+    finally:
+        conn.close()
+
+
 def result_exists(run_id: str, query_id: str, profile: str, model: str) -> bool:
     conn = _conn()
     try:

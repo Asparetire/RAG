@@ -204,5 +204,13 @@
 - **S3 审查闭环**（specs/reviews/m6-trash.review.md）：独立子代理审查发现 **1 Blocker（B-1：BM25 语料源无软删过滤——重建仍含已删文档，D 档问答仍可召回已删论文；17 条 mock 级测试的替身盲区）+ 2 Major（purge 事务声明失实/守卫缺两处）**，全部修复：语料源 JOIN 过滤+软删/恢复双侧重序+重复删除自愈语义+显式事务+守卫补齐+retry 垃圾桶感知；**R1 容器终验：软删后 BM25 块数 25→0、恢复后 25 回位**。
 - **部署实录**：卡死任务 37（b056，parsing 2h+）被启动扫描标 failed 可重试；并行会话在同仓活动（189e/44a8 的 t_doc 行与解析产物被其清理，PDF 仍在可重入库；其 _diag_* 脚本与 PdfPane.jsx 改动随本会话 git add -A 一并入库，见上条）。
 
+## 2026-11-16｜fix：评测跑批僵尸 running 行——启动扫描兜底（daemon 线程不跨重启）
+
+- **症状**：评测看板点"跑 gen_model"后状态永远显示 running（completed 0/100 不动）。实证：gen_model-20261116-145758 于 14:57:59 启动，15:03 服务重启（start_server.sh pkill）把进程内 daemon 跑批线程击杀，t_eval_run 状态无人清理，永挂 running。
+- **根因**：`/api/eval/run` 用 `threading.Thread(daemon=True)` 在 uvicorn 进程内跑批，状态写 t_eval_run（running→completed/error）；daemon 线程随进程死亡，但评测侧没有上传任务侧那套"重启后遗留 running"恢复机制（S3 M-5 sweep_stale_tasks 已有，评测漏配）。
+- **修复**：`ablation.sweep_stale_runs()`——启动时把全部遗留 running 行标 error（error="服务重启，跑批中断（进程内线程不跨重启）"），api.py create_app 启动扫描块接线（与 sweep_stale_tasks 并列，失败不阻塞启动）；单测 +2（fake 连接断言 SQL，全量 239 passed）。
+- **备注**：跑批本身设计即进程内线程（无法跨重启续跑），正常一整套 1~2.5h（main 126 题 ≈105min、qasper 71 题 ≈85min、gen_model 100 题 ≈87min），看板 5s 轮询进度——点"跑"后长时间 running 属正常，只有"重启后仍 running 且 completed 不动"才是僵尸。
+
+
 
 
