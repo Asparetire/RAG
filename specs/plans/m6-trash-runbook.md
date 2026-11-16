@@ -62,10 +62,11 @@
 
 ## 7. 风险与回滚
 
-- **并发**：删除/恢复/purge 全进 `_INGEST_LOCK`（与入库互斥）；R5 守卫拒绝进行中任务。
+- **并发**：删除/恢复/purge 全进 `_INGEST_LOCK`（与入库互斥）+ R5 守卫拒绝进行中任务；**前提：单 uvicorn 进程（start_server.sh 现状），多 worker/多实例需换分布式锁**（审查 n-6 记池）。
 - **误删**：确认模态框（R6）+ purge 二次确认 + PDF trash_files 兜底 + parsed 目录可由 PDF 重解析再生（代价：MinerU 分钟级）。
-- **孤儿文件**：文件操作在 DB 事务后，失败仅日志（下次 purge 重试幂等清理）。
+- **孤儿文件**：文件操作在 DB 事务后，失败记 warning 日志（审查 m-5），重试幂等清理。
 - **回滚**：功能单提交可 `git revert`；deleted_at 列残留无害（无代码引用即透明）。
+- **软删语义边界（审查 m-3 明示）**：软删仅移除"检索面（Qdrant+BM25）+列表"，垃圾桶内文档的 PDF/图件**直链仍可访问**——资产原地保留是可恢复的前提（paperless 同款）。
 
 ## 8. 敏感代码判定
 
@@ -90,4 +91,6 @@
 - **覆盖率**（新增/改动行）：bm25.bm25_rebuild、paperlib 回收站段 L362-515、api.py 新端点 L358-398 + GET /api/docs 过滤 + 上传去重改动——**100%**（missing 项均为既有代码）。全量 231 passed。
 - **部署冒烟（容器实测，2026-11-16 17:1x）**：删除→removed_points=27→清单/侧栏/Qdrant 全不可见→垃圾桶可见→恢复→**点位 27 回归**→垃圾桶空；磁盘资产完好；卡死任务 37（b056，parsing 2h+）被启动扫描标 failed 可重试；新 bundle index-CTp4u6I4.js 上线；trash 端点无鉴权 401 ✓。
 - **冒烟抓真 bug 一枚**：restore 初版 force=False → doc_hash 未变被 process_doc 增量跳过（零写入）→ 恢复后点位丢失；TDD 补断言 force=True 修复复验通过（commit 9ef6fa4）。
-- **部署插曲**：init_db 幂等补列先行；发现 189e/44a8 两篇的 t_doc 行与解析产物在 15:30-17:10 间被并行会话清理（非本会话操作，PDF 仍在可重入库）；git add -A 误提交并行会话的 17 个 scripts/_diag_* 脚本（已入库，保留避免破坏其工作区）。
+- **部署插曲**：init_db 幂等补列先行；发现 189e/44a8 两篇的 t_doc 行与解析产物在 15:30-17:10 间被并行会话清理（非本会话操作，PDF 仍在可重入库）；git add -A 误提交并行会话的 17 个 scripts/_diag_* 脚本（后随其自行清理一并出库）。
+- **S3 审查（specs/reviews/m6-trash.review.md）**：初版 1 Blocker + 2 Major 全部修复（B-1 BM25 语料源过滤+双侧重序+自愈语义；M-1 purge 显式事务；M-2 守卫补齐+retry/去重垃圾桶感知）+ m-1/m-2/m-4/m-5/n-1/n-2 随手修 + R1 容器终验（BM25 块数 25→0→25）+ 237 passed。记池：n-3 deleted_by 审计出口、n-4 trash_files 覆盖日志、n-5 deleted_at 索引、n-6 分布式锁（多 worker 前提）。
+- **M6 待办移交（本轮新增）**：司尔特 526144f26443 仍缺 PDF 原件（用户放入 data/pdfs_inbox 后校验指纹回填）；b056 任务已标 failed 可从论文库重试。

@@ -195,5 +195,14 @@
 - **验证**：本地无头 Edge（CDP 截图）复现灰块 → 加 `suspense={false}` 后页面渲染 + 高亮框精准命中标题；`npm run build` 重建 dist 随仓库同步。
 - **排查手段沉淀**：CDP `Runtime.consoleAPICalled/exceptionThrown` 抓静默失败；服务端 uvicorn 访问日志区分"请求没发出"vs"渲染失败"；`react-pdf__Document` 空 div + 0 canvas = Suspense 挂起指纹。
 
+## 2026-11-16｜feat：论文删除+回收站（Trash）——方案 B 软删+检索面移除（TDD 全程）
+
+- **功能**：论文卡片"删除"→进垃圾桶（问答与列表立即不可见，DB 行与磁盘资产原地保留，随时恢复）；垃圾桶弹窗（列表/恢复/彻底删除/清空）；彻底删除仅限垃圾桶内文档，PDF 原件移 `data/trash_files/` 兜底（paperless-ngx EMPTY_TRASH_DIR 同款）。五端点：DELETE /api/papers/{doc_id}、GET /api/papers/trash、POST .../restore、DELETE .../purge、POST /api/papers/trash/empty。
+- **调研**（specs/research/m6-paper-trash-survey.md v1.0）：删除面六类资产盘点；paperless-ngx（软删保留一切+30 天保留期，文档原文核实）vs open-webui（硬删+悬挂引用清扫，源码核实）两派；方案对比选 B（纯查询期过滤被否：热路径风险；文件回收站被否：垃圾桶元数据要扫盘）。
+- **实现**：t_doc 幂等补列 deleted_at/deleted_by；soft_delete/restore/purge 三函数 + bm25_rebuild 公共封装（四处共用）；过滤面四处（list_papers/分类计数/GET /api/docs/上传去重 409 垃圾桶文案）；R5 守卫（进行中任务拒绝删除）；恢复=清标记→process_doc(force=True) 重放（嵌入缓存命中零 API 费用）→BM25 重建。
+- **TDD**：22 条单测（FakeConn 替身+sqlite 内存库真 SQL 回归），新增/改动行覆盖 100%，全量 237 passed。
+- **S3 审查闭环**（specs/reviews/m6-trash.review.md）：独立子代理审查发现 **1 Blocker（B-1：BM25 语料源无软删过滤——重建仍含已删文档，D 档问答仍可召回已删论文；17 条 mock 级测试的替身盲区）+ 2 Major（purge 事务声明失实/守卫缺两处）**，全部修复：语料源 JOIN 过滤+软删/恢复双侧重序+重复删除自愈语义+显式事务+守卫补齐+retry 垃圾桶感知；**R1 容器终验：软删后 BM25 块数 25→0、恢复后 25 回位**。
+- **部署实录**：卡死任务 37（b056，parsing 2h+）被启动扫描标 failed 可重试；并行会话在同仓活动（189e/44a8 的 t_doc 行与解析产物被其清理，PDF 仍在可重入库；其 _diag_* 脚本与 PdfPane.jsx 改动随本会话 git add -A 一并入库，见上条）。
+
 
 
