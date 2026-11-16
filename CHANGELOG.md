@@ -161,5 +161,17 @@
 - **交互优化**（J 线调研 [J1]–[J17]：ai-chatbot/open-webui/LobeChat/ragflow 动效参数）：移动/新建/重命名分类改**下拉与表单模态框**（替换 prompt 填 ID）；动效层=消息入场（8px 上浮 0.3s spring）+流式打字光标+面板滑入（LobeChat 0.28s smooth）+弹窗缩放（flyAndScale 0.95→1）+hover/按压反馈+**prefers-reduced-motion 全局降级**；缓动变量 --ease-spring/--ease-smooth 入 ：root。
 - **运维**：`scripts/start_server.sh` 自愈启动（pkill→等端口释放→setsid→健康检查重试）——终结 ssh 会话 pkill/启动竞争翻车；tag m4 随修复批更新（最终 2874a0b+交互优化批）。
 
+## 2026-11-16｜feat：M5 评测收官（三层混合评测+全档消融数据，tag m5）
+
+- **三层混合架构**（预研 m5-eval-survey.md v1.0：QASPER/BEIR/RGB 基准调研+RAGAS/ALCE/ir-measures 口径调研）：L1 自建域内题集 126 题（VLM 出题管线+三道质量闸+AI 复审）+ L2 公开基准（QASPER 12 篇 71 题+BEIR SciFact/NFCorpus 旁测）+ L3 标准口径指标（TREC recall 声明/nDCG log2/Counter F1/faithfulness/citation）。
+- **题集构建**（dataset.py）：VLM 五类出题模板（文本相邻组/表格/图表带原图/反事实不可答/噪声）+三道质量闸（3-gram 去重/双向原文锚定+quote 依据句/BM25 断层伪题检测）；**三轮试审批迭代**（20/20 锚定覆没→quote+双向修正→图表题豁免文本锚定）——评测质量闸需按语料特性校准的实证。
+- **QASPER 接入**：12 篇 arXiv 论文抓取+MinerU 解析+入库（66 题 evidence→chunk 模糊匹配 93%+5 不可答，33 题图表证据=多模态专项）；**Answer-F1/Evidence-F1 官方口径**。
+- **跑批**：五套件全部完成（main D 档 126 题/859 条+A 858+C 858+E 859+F 859+QASPER 471+gen_model 700+smoke 20=**4293 条指标**）；幂等断点续跑+看板轮询全程稳定。
+- **消融结论**（六档总表）：A 纯文本 recall@5=0.186 → C+图像嵌入=0.354（**多模态检索增益 90%**）→ D+LLM 重排=0.495（**重排增益 40%**）→ E/F 微优——**每模块贡献量化实证**；D 档 answer_f1 0.071（生成质量 faithfulness/citation 指标为下阶段深化位）。
+- **外部基准**：BEIR SciFact nDCG@10=**0.736**（超公开 BM25 基线 ≈0.665）/NFCorpus=0.334（≈基线水平）；gen_model 对比：deepseek-v4.1-flash F1 0.108 vs kimi-k3 0.075。
+- **看板**（5.8）：前端第三 Tab 评测看板（跑批列表/进度/六档×指标对比表+跑批触发按钮）+ /api/eval/* 四端点——**看板与报告同源 t_eval_result**。
+- **跑批实战修复**（每个都有 commit）：pymysql 2.x begin() 语义（with conn.begin() 失效→显式 begin/commit/rollback）+ingest reused 作用域回归（M2 潜伏，图像入库必炸）+后台线程事件循环+SameFileError+多实例竞争（INGEST_LOCK 跨进程无效→清场单实例）+BEIR 逐查询重建索引（索引只建一次）+qrels 3/4 列兼容。
+- **测试**：212 passed 双端（+16：指标口径 8/质量闸 8）。**待办移交**：① McNemar/bootstrap CI 全对比补齐（数据已在 t_eval_result）；② judge 人工对齐 50 题；③ A/C/E/F 档 faithfulness 补跑；④ attribution 看板节接通。
+
 
 
