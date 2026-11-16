@@ -341,6 +341,16 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 
+    @protected.patch("/api/papers/{doc_id}/title")
+    def api_paper_rename(doc_id: str, body: dict):
+        """论文重命名（4.8 交互优化；用户 UI 操作）。"""
+        from doclens import paperlib
+        try:
+            paperlib.rename_paper(doc_id, body.get("title"))
+            return {"ok": True}
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+
     # ---- 评测看板（5.8；只读聚合+跑批触发）----
     @protected.get("/api/eval/runs")
     def api_eval_runs() -> list[dict]:

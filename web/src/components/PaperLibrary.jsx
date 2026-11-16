@@ -143,9 +143,8 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
   }
 
   // ---- 模态框状态（S3 体检/用户反馈：prompt 填 ID 体验差 → 下拉选择式）----
-  // kind: 'move' | 'new' | 'rename'
+  // kind: 'move' | 'new' | 'rename' | 'renamePaper'
   const [modal, setModal] = useState(null)
-  // move: {paper, catId}；new: {parentId, name}；rename: {catId, name}
   const closeModal = () => setModal(null)
 
   const submitModal = async () => {
@@ -167,6 +166,11 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
         r = await authedFetch(`/api/categories/${modal.catId}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: modal.name }),
+        })
+      } else if (modal.kind === 'renamePaper') {
+        r = await authedFetch(`/api/papers/${modal.paper.doc_id}/title`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: modal.name }),
         })
       }
       const d = await r.json()
@@ -270,6 +274,10 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
                   <button className="link-btn" onClick={() => onOpenPaper(p)}>预览</button>
                   {' '}
                   <button className="link-btn"
+                          onClick={() => setModal({ kind: 'renamePaper', paper: p, name: p.title })}>
+                    改名</button>
+                  {' '}
+                  <button className="link-btn"
                           onClick={() => setModal({ kind: 'move', paper: p, catId: p.category_id != null ? String(p.category_id) : '' })}>
                     移动</button>
                 </td>
@@ -317,6 +325,15 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
                 <>
                   <h4>重命名分类</h4>
                   <label className="modal-label">新名称</label>
+                  <input className="modal-select" autoFocus value={modal.name || ''}
+                         onChange={(e) => setModal({ ...modal, name: e.target.value })} />
+                </>
+              )}
+              {modal.kind === 'renamePaper' && (
+                <>
+                  <h4>重命名论文</h4>
+                  <div className="modal-paper">{modal.paper.doc_id}</div>
+                  <label className="modal-label">论文标题</label>
                   <input className="modal-select" autoFocus value={modal.name || ''}
                          onChange={(e) => setModal({ ...modal, name: e.target.value })} />
                 </>

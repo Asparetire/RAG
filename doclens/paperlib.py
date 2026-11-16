@@ -413,6 +413,10 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
             # 5) 分类归属 + 完成态
             if category_id:
                 assign_category(doc.doc_id, category_id)
+            # 标题兜底（4.8 交互优化）：MinerU 提取失败时从 markdown 一级标题回填
+            if not (doc.title or "").strip():
+                from doclens.paperlib import backfill_title_from_markdown as _bf
+                backfill_title_from_markdown(doc.doc_id)
             update_task(task_id, status="completed", progress=1.0,
                         progress_msg=f"入库完成 text={r['n_text']} img={r['n_img']}",
                         completed_chunks=r["n_text"], total_chunks=r["n_text"] + r["n_img"])
@@ -445,6 +449,47 @@ def assign_category(doc_id: str, category_id: int | None) -> None:
                 cur.execute("UPDATE t_doc SET category_id=%s WHERE doc_id=%s",
                             (category_id, doc_id))
         conn.commit()
+    finally:
+        conn.close()
+
+
+def rename_paper(doc_id: str, title: str) -> None:
+    """论文重命名（用户 UI 操作；S4 约定：标题长度校验+入库参数化）。"""
+    title = (title or "").strip()
+    if not title or len(title) > 256:
+        raise ValueError("标题需为 1–256 字符")
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM t_doc WHERE doc_id=%s", (doc_id,))
+            if cur.fetchone()[0] == 0:
+                raise ValueError("论文不存在")
+            cur.execute("UPDATE t_doc SET title=%s WHERE doc_id=%s", (title, doc_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def backfill_title_from_markdown(doc_id: str) -> str | None:
+    """解析完成后 title 为空 → 从 parsed markdown 的一级标题回填（QASPER 12 篇
+    空标题的泛化解；提取失败返回 None——调用方保留 doc_id 回退显示）。"""
+    md = PARSED_DIR / doc_id / "markdown.md"
+    if not md.exists():
+        return None
+    best = ""
+    for line in md.read_text(encoding="utf-8").splitlines()[:15]:
+        s = line.strip()
+        if s.startswith("# ") and len(s) > len(best):
+            best = s[2:].strip()
+    if not best or len(best) > 256:
+        return None
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE t_doc SET title=%s WHERE doc_id=%s AND (title IS NULL OR title='')",
+                        (best, doc_id))
+        conn.commit()
+        return best
     finally:
         conn.close()
 

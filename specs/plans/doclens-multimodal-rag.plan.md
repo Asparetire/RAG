@@ -188,6 +188,8 @@ doclens/
 | 6.1 | README 定稿（部署拓扑：本地开发/服务器存储两端点说明/架构图/指标表/成本表） | 新人克隆跑通（含服务器栈前置说明） | README |
 | 6.2 | 演示录屏 + 财报泛化包（P1） | 录屏产出 | data/web |
 
+> **M6 收官补记（2026-11-16）**：实施按 [m6-polish-survey](../research/m6-polish-survey.md) 调研修订——README 章节按 5 项目实证骨架（首屏截图四宫格/两条命令=clone+start_server.sh/架构图静态 png/评测小表进 README）；录屏=user-attachments mp4 内联（lobe-chat 惯例）+Playwright 脚本化录制；财报泛化=零样本跨域口径（BEIR 方法学）+OmniDocBench 维度预检清单。全部由 AI 完成（含财报 PDF 公开渠道获取与 Playwright 自动演示录像）。
+
 **总计**：约 10–14 个工作日（业余 2–3 周）。每里程碑完成即 `git commit + tag`。
 
 ---
