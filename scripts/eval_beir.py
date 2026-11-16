@@ -91,8 +91,8 @@ def eval_beir(name: str, *, sample_queries: int = 100) -> dict:
             units = [{"chunk_id": cid, "doc_id": cid, "kind": "text",
                       "content": f"{t} {txt}"} for cid, (t, txt) in list(corpus.items())]
             idx = B.build_index(units)
-            scored = B.search(idx, query, top_k=10)
-            ranked = [s["chunk_id"] for s in scored]
+            scored = idx.search(query, top=10)
+            ranked = [cid for cid, _score in scored]
             results["ndcg10"].append(_ndcg10(ranked, relevant))
             results["recall10"].append(_recall10(ranked, relevant))
             if i % 50 == 0:
