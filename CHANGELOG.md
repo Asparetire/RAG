@@ -187,5 +187,13 @@
 - **修复**：`mineru_parser.parse_pdf` 在缓存判定**之前**调新增 `_ensure_canonical(pdf_path, doc_id)`——任何入口解析/增量重跑都自动补齐 canonical（源即 canonical 或目标已存在则跳过，幂等）；单测 +2（拷贝幂等/重试不自拷），cache-hit 测试补 DATA_DIR 打丁，12 passed。
 - **恢复**：MinerU 渲染临时目录 /tmp/docvortex-render-*/input.pdf 是 canonical 的字节级副本（sha256 前缀=doc_id 实证）——189e6dadabc1/44a8759c94e1 两篇据此恢复；司尔特 526144f26443 的临时副本已被系统清理，需用户提供原始 PDF 放入后校验指纹回填。
 
+## 2026-11-16｜fix：引用 PDF 面板整体灰块——react-pdf 11 默认 suspense 与应用无 Suspense 边界冲突
+
+- **症状**：点引用来源后面板整体灰色、无页面无加载中无报错（cMaps 修复后仍复现）；服务端日志显示 PDF 200+206 全部成功、worker 304 正常，故障在浏览器渲染环节。
+- **根因**：react-pdf 11 的 `<Document>` 默认 `suspense=true`，加载改走 React 19 `use()` 挂起机制，要求组件树上有 `<Suspense>` 边界；应用只有 ErrorBoundary 没有 Suspense——挂起后 UI 永不提交，`onLoadSuccess` 不触发 → numPages=0 → 连 loading/error 兜底都不渲染，只剩 `.pdf-pane` 灰底（#e9ebef）。上午 15:21 的 cMaps 修复是必要但非充分——同症状两层叠加。
+- **修复**：`PdfPane` 的 `<Document>` 显式 `suspense={false}`（走 effect 加载路径，loading/error props 恢复生效，与现有代码语义匹配）+ `options` 改 `useMemo`（消除 react-pdf "unnecessary reloads" 警告）。
+- **验证**：本地无头 Edge（CDP 截图）复现灰块 → 加 `suspense={false}` 后页面渲染 + 高亮框精准命中标题；`npm run build` 重建 dist 随仓库同步。
+- **排查手段沉淀**：CDP `Runtime.consoleAPICalled/exceptionThrown` 抓静默失败；服务端 uvicorn 访问日志区分"请求没发出"vs"渲染失败"；`react-pdf__Document` 空 div + 0 canvas = Suspense 挂起指纹。
+
 
 
