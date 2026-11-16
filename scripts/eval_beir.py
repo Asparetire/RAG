@@ -30,17 +30,18 @@ DATASETS = ["scifact", "nfcorpus"]
 
 
 def ensure_data(name: str) -> Path:
+    import zipfile
     d = BEIR_DIR / name
     if (d / "corpus.jsonl").exists():
         return d
     BEIR_DIR.mkdir(parents=True, exist_ok=True)
-    tgz = BEIR_DIR / f"{name}.zip"
-    if not tgz.exists():
+    zf_path = BEIR_DIR / f"{name}.zip"
+    if not zf_path.exists():
         url = f"{BASE}/{name}.zip"
         print(f"[download] {url}")
-        urllib.request.urlretrieve(url, tgz)
-    with tarfile.open(tgz) as tf:
-        tf.extractall(BEIR_DIR)
+        urllib.request.urlretrieve(url, zf_path)
+    with zipfile.ZipFile(zf_path) as zf:  # BEIR 是 zip 包（非 tar.gz——首版写错）
+        zf.extractall(BEIR_DIR)
     # zip 内可能是 {name}/{name}/corpus.jsonl 嵌套
     if not (d / "corpus.jsonl").exists():
         nested = BEIR_DIR / name / name
