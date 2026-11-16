@@ -79,30 +79,25 @@ def load_beir(name: str) -> tuple[dict, dict, dict]:
 def eval_beir(name: str, *, sample_queries: int = 100) -> dict:
     corpus, queries, qrels = load_beir(name)
     qids = [q for q in queries if q in qrels][:sample_queries]
-    client = EmbeddingClient()
-    qclient = qs._client()
+    # 索引只建一次（首版每查询重建 5K 语料索引=小时级卡死——M5 体检修正）
+    units = [{"chunk_id": cid, "doc_id": cid, "kind": "text",
+              "content": f"{t} {txt}"} for cid, (t, txt) in list(corpus.items())]
+    idx = B.build_index(units)
+    print(f"[beir {name}] corpus={len(units)} queries={len(qids)}", flush=True)
     results = {"ndcg10": [], "recall10": []}
-    try:
-        for i, qid in enumerate(qids, 1):
-            query = queries[qid]
-            relevant = {did for did, rel in qrels[qid].items() if rel > 0}
-            # BM25 旁测：临时索引（语料小，逐查询建索引代价可接受——
-            # 实际实现：把 BEIR corpus 当作临时 BM25 池）
-            units = [{"chunk_id": cid, "doc_id": cid, "kind": "text",
-                      "content": f"{t} {txt}"} for cid, (t, txt) in list(corpus.items())]
-            idx = B.build_index(units)
-            scored = idx.search(query, top=10)
-            ranked = [cid for cid, _score in scored]
-            results["ndcg10"].append(_ndcg10(ranked, relevant))
-            results["recall10"].append(_recall10(ranked, relevant))
-            if i % 50 == 0:
-                print(f"  [{i}/{len(qids)}]")
-    finally:
-        qclient.close()
+    for i, qid in enumerate(qids, 1):
+        query = queries[qid]
+        relevant = {did for did, rel in qrels[qid].items() if rel > 0}
+        scored = idx.search(query, top=10)
+        ranked = [cid for cid, _score in scored]
+        results["ndcg10"].append(_ndcg10(ranked, relevant))
+        results["recall10"].append(_recall10(ranked, relevant))
+        if i % 25 == 0:
+            print(f"  [{i}/{len(qids)}]", flush=True)
     out = {"dataset": name, "n_queries": len(qids),
            "ndcg@10": sum(results["ndcg10"]) / len(results["ndcg10"]),
            "recall@10": sum(results["recall10"]) / len(results["recall10"])}
-    print("[beir]", out)
+    print("[beir]", json.dumps(out), flush=True)
     return out
 
 
