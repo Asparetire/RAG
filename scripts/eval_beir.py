@@ -65,7 +65,13 @@ def load_beir(name: str) -> tuple[dict, dict, dict]:
     with (d / "qrels" / "test.tsv").open(encoding="utf-8") as f:
         next(f)
         for line in f:
-            qid, _, did, rel = line.strip().split("\t")
+            parts = line.strip().split("\t")
+            if len(parts) == 4:      # qid \t 0 \t did \t rel（TREC 标准 4 列）
+                qid, _, did, rel = parts
+            elif len(parts) == 3:    # qid \t did \t rel（简化 3 列）
+                qid, did, rel = parts
+            else:
+                continue
             qrels[qid][did] = int(rel)
     return corpus, queries, qrels
 
