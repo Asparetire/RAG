@@ -452,7 +452,9 @@ def restore_doc(doc_id: str) -> dict:
         conn = connect()
         try:
             qs.ensure_collections(qclient)
-            process_doc(client, qclient, conn, parsed_root, force=False)
+            # force=True：软删期间 doc_hash 未变，增量语义会"整篇跳过零写入"→ Qdrant
+            # 点位不回来（容器冒烟实证）。强制重放；嵌入缓存命中 → 零 API 费用。
+            process_doc(client, qclient, conn, parsed_root, force=True)
         finally:
             conn.close()
             qclient.close()

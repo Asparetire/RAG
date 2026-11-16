@@ -162,12 +162,14 @@ def test_restore_replays_and_clears_flag(monkeypatch, tmp_path):
     replayed = []
     import scripts.ingest as ingest_mod
     monkeypatch.setattr(ingest_mod, "process_doc",
-                        lambda client, q, c, root, force=False: replayed.append(root))
+                        lambda client, q, c, root, force=False: replayed.append((root, force)))
 
     out = pl.restore_doc(doc_id)
 
     assert out["ok"] is True and out["pdf_ok"] is True
-    assert replayed == [tmp_path / "parsed" / doc_id], "应重放索引入库（嵌入缓存命中）"
+    # 容器冒烟实证：doc_hash 未变时 process_doc 默认增量跳过（零写入）→ 恢复后 Qdrant
+    # 点位丢失。恢复必须 force=True 强制重放（嵌入缓存命中，零 API 费用）。
+    assert replayed == [(tmp_path / "parsed" / doc_id, True)], "恢复必须强制重放（force=True）"
     assert rebuilds, "恢复后应重建 BM25"
     clears = [sql for sql, _ in conn.queries
               if sql.startswith("UPDATE t_doc") and "deleted_at=NULL" in sql]
