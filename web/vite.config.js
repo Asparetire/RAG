@@ -10,9 +10,12 @@ export default defineConfig({
   plugins: [
     react(),
     viteStaticCopy({
+      // v4 起目录结构原样保留（含 node_modules 前缀）→ 必须 stripBase 平铺，
+      // 否则产物落 dist/pdfjs/node_modules/pdfjs-dist/...（且被 .gitignore 的
+      // node_modules/ 规则挡住不入库，容器上 404 → PDF 页面渲染空白灰块）。
       targets: [
-        { src: 'node_modules/pdfjs-dist/cmaps', dest: 'pdfjs' },
-        { src: 'node_modules/pdfjs-dist/standard_fonts', dest: 'pdfjs' },
+        { src: 'node_modules/pdfjs-dist/cmaps', dest: 'pdfjs/cmaps', rename: { stripBase: true } },
+        { src: 'node_modules/pdfjs-dist/standard_fonts', dest: 'pdfjs/standard_fonts', rename: { stripBase: true } },
       ],
     }),
   ],

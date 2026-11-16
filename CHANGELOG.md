@@ -173,5 +173,12 @@
 - **跑批实战修复**（每个都有 commit）：pymysql 2.x begin() 语义（with conn.begin() 失效→显式 begin/commit/rollback）+ingest reused 作用域回归（M2 潜伏，图像入库必炸）+后台线程事件循环+SameFileError+多实例竞争（INGEST_LOCK 跨进程无效→清场单实例）+BEIR 逐查询重建索引（索引只建一次）+qrels 3/4 列兼容。
 - **测试**：212 passed 双端（+16：指标口径 8/质量闸 8）。**待办移交**：① McNemar/bootstrap CI 全对比补齐（数据已在 t_eval_result）；② judge 人工对齐 50 题；③ A/C/E/F 档 faithfulness 补跑；④ attribution 看板节接通。
 
+## 2026-11-16｜fix：引用高亮灰块无文字——pdfjs cMaps/标准字体静态资源 404 修复
+
+- **症状**：问答页点右侧引用来源，PDF 面板对应页只有灰色一块、无文字（bbox 高亮框是独立 DOM 覆盖层照常显示，canvas 渲染失败露出面板灰底）。
+- **根因**：vite-plugin-static-copy v4 起目录结构原样保留（README §82），`{ src: 'node_modules/pdfjs-dist/cmaps', dest: 'pdfjs' }` 把产物拷进 `dist/pdfjs/node_modules/pdfjs-dist/cmaps/`——既与代码请求路径 `/web/pdfjs/cmaps/` 不符，又被 `web/.gitignore` 的 `node_modules/` 规则挡住不入库，容器 dist 完全没有这批资源；pdf.js 渲染每页时 cMap（中文 PDF 编码映射）与标准字体文件 404 → 页面 canvas 全部空白。
+- **修复**：vite.config.js 两个拷贝目标补 `rename: { stripBase: true }` 平铺落位（dist/pdfjs/cmaps 169 文件 + standard_fonts 16 文件），重建后 dist/pdfjs/ 入库；容器经 git 同步后 StaticFiles 即时生效（静态文件按请求读盘，无需重启服务）。
+- 排查手段：隧道探测 `/web/pdfjs/cmaps/Adobe-GB1-0.bcmap` 等 3 个 URL 均 404 实锤；修复后应 200。
+
 
 
