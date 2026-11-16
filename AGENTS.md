@@ -13,7 +13,7 @@
 - **收工口令**：用户说"收工/记录进度"时，执行三件事——① 更新下方 Next Action；② 补 CHANGELOG.md；③ commit + push。
 - 用户已确认：成本/定价**不做精确核算**（M2 批量嵌入前看一眼方舟控制台额度余量即可）；成本表只记录耗时与额度观察。
 
-Next Action: **M5 评测已收官（2026-11-16 tag m5，三层混合评测+全档消融数据）——下一站 M6 打磨（README 定稿+演示录屏+财报泛化包，1–2 天，项目最后一站）**。M5 交付：三层评测（L1 自建题集 126 题+L2 QASPER 外部基准 71 题/BEIR 旁测+L3 标准口径指标）+五套件跑批完成（**4293 条指标**：D 档 126 题 859 条/A/C/E/F 各 ~858/QASPER 471/gen_model 700）+消融结论（A 0.186→C 0.354→D 0.495：多模态与重排两大增益实证；BEIR SciFact 0.736 超 BM25 公开基线）+评测看板第三 Tab+报告 reports/ablation.md。**M5 待办移交**：① McNemar/bootstrap 全对比补齐；② judge 人工对齐 50 题；③ A/C/E/F faithfulness 补跑；④ attribution 看板节接通；⑤ .env.example 补 M4 三字段。M4 遗留同前（上传终验/记池项/密码轮换）。基础设施：本机隧道 13306/16333/8000；容器服务重启 `bash /home/doclens/RAG/scripts/start_server.sh`（WEB_STATIC=1 交付态）。M6 内容：6.1 README 定稿（新人克隆两条命令跑通，Win11 实测 FR-7.1，指标表进 README）+6.2 演示录屏+财报泛化包（P1，cMaps 已配）。双端同步纪律同前（容器未跟踪文件挡推送先清）。
+Next Action: **项目全部里程碑完成（M0–M6，2026-11-17 tag m6）——M6 打磨收官（README 定稿+演示录屏脚本+财报泛化包零样本评测）**。M6 交付：README 定稿（章节按 5 项目实证骨架：首屏截图四宫格/两条命令跑通/架构图 SVG/评测小表/FAQ）+LICENSE(MIT)+docs/deploy.md（服务器栈前置）+docs/finance-generalization.md（零样本口径+OmniDocBench 预检清单）+architecture.svg+scripts/demo_record.py（Playwright 分镜录屏，需执行产出视频）+.env.example 全字段。**财报泛化包**：3 篇 A 股年报（巨潮公开披露：茅台/招行/司尔特+海目星/麒麟信安）——司尔特入库 832 块+茅台 764 块（300 页大财报全链路首次完整跑通）+零样本评测 8/8（表格题正常应答+反事实拒答 2/2）；**MinerU 大财报算力边界如实记录**（招行 300+页超时 1h/4h 两档——数百页财报需分段解析，后续优化位）。**M5 待办移交**：① McNemar/bootstrap 全对比补齐；② judge 人工对齐 50 题；③ A/C/E/F faithfulness 补跑；④ attribution 看板节接通；⑤ .env.example 已补（M4 遗留⑤闭环）。**项目收尾建议**（可选）：① 演示录屏执行（scripts/demo_record.py，DEMO_PASSWORD 环境变量）；② 截图四宫格补齐（README 占位）；③ 密码轮换（本对话出现过明文）；④ M2-M6 各收官补记的记池项汇总清理。基础设施与双端同步纪律同前。
 
 ## 项目速查（随进展更新）
 
