@@ -297,6 +297,17 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         filename, cat_id, doc_id = row
         if not doc_id:
             raise HTTPException(status_code=422, detail="任务未生成 doc_id，无法重试")
+        # m6-trash（审查 M-2）：垃圾桶内文档拒绝重试——防"任务完成"改写垃圾桶内文档分类
+        conn2 = connect()
+        try:
+            with conn2.cursor() as cur:
+                cur.execute("SELECT deleted_at FROM t_doc WHERE doc_id=%s", (doc_id,))
+                drow = cur.fetchone()
+        finally:
+            conn2.close()
+        if drow and drow[0] is not None:
+            raise HTTPException(status_code=422,
+                                detail="该论文在垃圾桶中，请先恢复后再重试")
         pdf_path = DATA_DIR / "pdfs" / f"{doc_id}.pdf"
         if not pdf_path.exists():
             raise HTTPException(status_code=422, detail="canonical PDF 不存在")
@@ -369,8 +380,9 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
             try:
                 paperlib.purge_doc(item["doc_id"])
                 n += 1
-            except ValueError:
-                pass  # 单篇失败（如正在入库）不拖垮清空，逐篇继续
+            except Exception:  # noqa: BLE001 单篇失败（含 Qdrant/IO）不拖垮清空，逐篇继续（审查 m-1）
+                logging.getLogger("uvicorn.error").warning(
+                    "清空垃圾桶：purge %s 失败", item["doc_id"], exc_info=True)
         return {"ok": True, "purged": n}
 
     @protected.delete("/api/papers/{doc_id}")
@@ -378,6 +390,8 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         from doclens import paperlib
         try:
             return paperlib.soft_delete_doc(doc_id)
+        except paperlib.PaperNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 
@@ -386,6 +400,8 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         from doclens import paperlib
         try:
             return paperlib.restore_doc(doc_id)
+        except paperlib.PaperNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 
@@ -394,6 +410,8 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         from doclens import paperlib
         try:
             return paperlib.purge_doc(doc_id)
+        except paperlib.PaperNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
 

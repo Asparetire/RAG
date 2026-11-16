@@ -104,7 +104,11 @@ def bm25_rebuild() -> dict:
 
 
 def load_units_from_db(doc_ids: list[str] | None = None) -> list[dict]:
-    """从 t_chunk 读文本单元（重建式增量的语料源——单一事实源，§3.1）。"""
+    """从 t_chunk 读文本单元（重建式增量的语料源——单一事实源，§3.1）。
+
+    m6-trash B-1：全量分支 JOIN t_doc 过滤垃圾桶文档（deleted_at IS NULL）——
+    语料源=现存可见文档的检索面，软删后重建自然摘除、恢复后重建自然包含。
+    """
     from doclens.index.db import connect
 
     conn = connect()
@@ -119,8 +123,9 @@ def load_units_from_db(doc_ids: list[str] | None = None) -> list[dict]:
                 )
             else:
                 cur.execute(
-                    "SELECT chunk_id, doc_id, kind, content FROM t_chunk "
-                    "WHERE kind IN ('text','table','caption')"
+                    "SELECT c.chunk_id, c.doc_id, c.kind, c.content "
+                    "FROM t_chunk c JOIN t_doc d ON d.doc_id = c.doc_id "
+                    "WHERE d.deleted_at IS NULL AND c.kind IN ('text','table','caption')"
                 )
             return [{"chunk_id": r[0], "doc_id": r[1], "kind": r[2], "content": r[3]}
                     for r in cur.fetchall()]

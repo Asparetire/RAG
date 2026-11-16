@@ -364,12 +364,16 @@ def sweep_stale_tasks() -> int:
 _ACTIVE_TASK_STATUSES = ("queued", "parsing", "indexing")
 
 
+class PaperNotFoundError(ValueError):
+    """doc_id 库中无行——API 层映射 404（格式非法仍是 ValueError → 422，审查 m-2）。"""
+
+
 def _get_doc_row(doc_id: str):
-    """(doc_id, deleted_at) 或 None（含 12 位十六进制格式守卫）。"""
+    """(doc_id, deleted_at) 或 None；格式非法直接抛 ValueError。"""
     import re
 
     if not re.fullmatch(r"[0-9a-f]{12}", doc_id or ""):
-        return None
+        raise ValueError(f"doc_id 格式非法：{doc_id!r}（应为 12 位十六进制）")
     conn = connect()
     try:
         with conn.cursor() as cur:
@@ -395,29 +399,19 @@ def _raise_if_ingesting(doc_id: str) -> None:
 
 
 def soft_delete_doc(doc_id: str, user_id: str | None = None) -> dict:
-    """删除进垃圾桶（m6-trash D2）：摘检索面（Qdrant 点位+BM25 重建）→ 打 deleted_at 标记。
+    """删除进垃圾桶（m6-trash D2 + B-1 修复重序）：打 deleted_at 标记 → 摘检索面。
 
-    DB 行与磁盘资产（data/pdfs 原件、data/parsed 产物）**原地保留**——垃圾桶期内可随时
-    恢复（paperless-ngx 同款语义）。标记最后打：前两步幂等可重放，中途失败重试无害；
-    已在垃圾桶 → 幂等返回不动检索面。
+    顺序关键（B-1）：BM25 语料源按 deleted_at 过滤（bm25.load_units_from_db），
+    打标必须先于重建——否则重建语料仍含已删文档，检索面摘除不成立。
+    Qdrant 摘点与 BM25 重建均幂等，重复删除=重放自愈（部分失败状态可补齐）；
+    DB 行与磁盘资产原地保留，垃圾桶期内可随时恢复（paperless-ngx 同款语义）。
     """
     row = _get_doc_row(doc_id)
     if row is None:
-        raise ValueError("论文不存在")
-    if row[1] is not None:
-        return {"ok": True, "already": True}
+        raise PaperNotFoundError("论文不存在")
     with _INGEST_LOCK:
         _raise_if_ingesting(doc_id)
-        # 1) 摘检索面（幂等）
-        from doclens.index import bm25 as B
-        from doclens.index import qdrant_store as qs
-        qclient = qs._client()
-        try:
-            removed = qs.delete_doc_points(qclient, doc_id)
-        finally:
-            qclient.close()
-        B.bm25_rebuild()
-        # 2) 打标记（最后一步）
+        # 1) 打标（语料过滤生效；WHERE 幂等——重复删除不重复置值）
         conn = connect()
         try:
             with conn.cursor() as cur:
@@ -427,24 +421,47 @@ def soft_delete_doc(doc_id: str, user_id: str | None = None) -> dict:
                     (user_id, doc_id))
         finally:
             conn.close()
+        # 2) 摘 Qdrant 点位（幂等）
+        from doclens.index import bm25 as B
+        from doclens.index import qdrant_store as qs
+        qclient = qs._client()
+        try:
+            removed = qs.delete_doc_points(qclient, doc_id)
+        finally:
+            qclient.close()
+        # 3) BM25 重建（语料源已过滤 → 已删文档自然出局）
+        B.bm25_rebuild()
     return {"ok": True, "removed_points": removed}
 
 
 def restore_doc(doc_id: str) -> dict:
-    """从垃圾桶恢复（m6-trash D3）：重放索引入库 → 清 deleted_at。
+    """从垃圾桶恢复（m6-trash D3 + B-1 修复重序）：清 deleted_at → 重放索引 → BM25 重建。
 
-    嵌入缓存按内容哈希命中 → 零 API 费用；BM25 全量重建秒级。清标记放最后：
-    论文"出现即完整"（列表可见时检索已可用，与删除的摘除顺序对称）。
+    顺序与软删对称（B-1）：先清标记使语料过滤放行，再 process_doc(force=True)
+    重放（嵌入缓存命中 → 零 API 费用），最后 BM25 重建。恢复窗口内列表先可见、
+    检索秒级就绪。进行中任务守卫防与入库线程竞争（审查 M-2）。
     """
     row = _get_doc_row(doc_id)
     if row is None:
-        raise ValueError("论文不存在")
+        raise PaperNotFoundError("论文不存在")
     if row[1] is None:
         raise ValueError("该论文不在垃圾桶中")
     with _INGEST_LOCK:
+        _raise_if_ingesting(doc_id)
         from doclens.index import bm25 as B
         from doclens.index import qdrant_store as qs
         parsed_root = PARSED_DIR / doc_id
+        if not (parsed_root / "doc.json").is_file():
+            raise ValueError("解析产物缺失，无法恢复——请重新上传原 PDF 入库")
+        # 1) 清标记（语料过滤放行；research L61 原定顺序）
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("UPDATE t_doc SET deleted_at=NULL WHERE doc_id=%s", (doc_id,))
+        finally:
+            conn.close()
+        # 2) 重放索引（force=True：doc_hash 未变时增量语义会零写入 → 点位不回来，
+        #    容器冒烟实证；嵌入缓存命中 → 零 API 费用）
         from doclens.index.embeddings import EmbeddingClient
         from scripts.ingest import process_doc
         client = EmbeddingClient()
@@ -452,35 +469,30 @@ def restore_doc(doc_id: str) -> dict:
         conn = connect()
         try:
             qs.ensure_collections(qclient)
-            # force=True：软删期间 doc_hash 未变，增量语义会"整篇跳过零写入"→ Qdrant
-            # 点位不回来（容器冒烟实证）。强制重放；嵌入缓存命中 → 零 API 费用。
             process_doc(client, qclient, conn, parsed_root, force=True)
         finally:
             conn.close()
             qclient.close()
+        # 3) BM25 重建（语料源已放行 → 本文档自然回位）
         B.bm25_rebuild()
-        conn = connect()
-        try:
-            with conn.cursor() as cur:
-                cur.execute("UPDATE t_doc SET deleted_at=NULL WHERE doc_id=%s", (doc_id,))
-        finally:
-            conn.close()
         pdf_ok = (DATA_DIR / "pdfs" / f"{doc_id}.pdf").is_file()
     return {"ok": True, "pdf_ok": pdf_ok}
 
 
 def purge_doc(doc_id: str) -> dict:
-    """彻底删除（m6-trash D4，唯一不可逆边界）：清库 → 删解析产物 → PDF 移 trash_files 兜底。
+    """彻底删除（m6-trash D4 + 审查 M-1/M-2 修复）：仅限垃圾桶内文档。
 
-    Qdrant 删除幂等重放（防软删中断残留）；DB 三步一事务（t_doc 删除经 FK 级联清
-    t_chunk），文件操作在提交后执行（失败留孤儿文件仅日志，重试幂等清理）。
+    顺序（不可逆点最后）：Qdrant 幂等重放 → DB 三条 DELETE 包显式事务
+    （autocommit 下必须 conn.begin()，审查 M-1）→ 删解析产物（失败记日志留孤儿，
+    审查 m-5）→ PDF 移 data/trash_files/ 兜底。R5 守卫拒绝进行中任务（审查 M-2）。
     """
     row = _get_doc_row(doc_id)
     if row is None:
-        raise ValueError("论文不存在")
+        raise PaperNotFoundError("论文不存在")
     if row[1] is None:
         raise ValueError("该论文不在垃圾桶中（须先删除进垃圾桶，再彻底删除）")
     with _INGEST_LOCK:
+        _raise_if_ingesting(doc_id)
         from doclens.index import qdrant_store as qs
         qclient = qs._client()
         try:
@@ -489,14 +501,24 @@ def purge_doc(doc_id: str) -> dict:
             qclient.close()
         conn = connect()
         try:
-            with conn.cursor() as cur:
-                cur.execute("DELETE FROM t_doc WHERE doc_id=%s", (doc_id,))
-                cur.execute("DELETE FROM t_ctx_prefix WHERE chunk_id LIKE %s", (f"{doc_id}:%",))
-                cur.execute("DELETE FROM t_ingest_task WHERE doc_id=%s", (doc_id,))
-            conn.commit()
+            conn.begin()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("DELETE FROM t_doc WHERE doc_id=%s", (doc_id,))
+                    cur.execute("DELETE FROM t_ctx_prefix WHERE chunk_id LIKE %s", (f"{doc_id}:%",))
+                    cur.execute("DELETE FROM t_ingest_task WHERE doc_id=%s", (doc_id,))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
         finally:
             conn.close()
-        shutil.rmtree(PARSED_DIR / doc_id, ignore_errors=True)
+        import logging
+        try:
+            shutil.rmtree(PARSED_DIR / doc_id)
+        except OSError as e:
+            logging.getLogger(__name__).warning(
+                "purge %s：解析产物清理失败（孤儿目录可重试清除）：%s", doc_id, e)
         pdf = DATA_DIR / "pdfs" / f"{doc_id}.pdf"
         if pdf.is_file():
             backup_dir = DATA_DIR / "trash_files"
@@ -541,16 +563,19 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
                 shutil.copy2(pdf_path, canonical)
             update_task(task_id, doc_id=doc_id, status="parsing", progress=0.05,
                         progress_msg="校验通过，开始解析")
-            # 去重：t_doc 已有同 doc_id → 直接归档跳过解析
+            # 去重：t_doc 已有同 doc_id → 直接归档跳过解析（m6-trash M-2：垃圾桶内
+            # 文档不归档不挂分类——报错引导先恢复，防"任务完成"改写垃圾桶内文档分类）
             from doclens.index.db import connect
             conn = connect()
             try:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT COUNT(*) FROM t_doc WHERE doc_id=%s", (doc_id,))
-                    exists = cur.fetchone()[0]
+                    cur.execute("SELECT deleted_at FROM t_doc WHERE doc_id=%s", (doc_id,))
+                    dup = cur.fetchone()
             finally:
                 conn.close()
-            if exists:
+            if dup:
+                if dup[0] is not None:
+                    raise ValueError("该论文在垃圾桶中，请先恢复后再上传/重试（与已入库论文同内容）")
                 update_task(task_id, status="completed", progress=1.0,
                             progress_msg="与已入库论文内容相同（sha256 重复），已归入分类",
                             completed_chunks=None, total_chunks=None)

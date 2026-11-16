@@ -213,11 +213,12 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
     setTrashBusy(true)
     try {
       const r = await authedFetch(`/api/papers/${docId}/restore`, { method: 'POST' })
-      const d = await r.json()
+      const d = await r.json().catch(() => ({}))
       if (!r.ok) window.alert(d.detail || '恢复失败')
       loadTrash(); load()
     } catch (e) {
       if (e instanceof AuthError) { onAuthError(e); return }
+      window.alert(`恢复失败：${e.message}`)
     } finally { setTrashBusy(false) }
   }
 
@@ -226,11 +227,12 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
     setTrashBusy(true)
     try {
       const r = await authedFetch(`/api/papers/${p.doc_id}/purge`, { method: 'DELETE' })
-      const d = await r.json()
+      const d = await r.json().catch(() => ({}))
       if (!r.ok) window.alert(d.detail || '彻底删除失败')
       loadTrash(); load()
     } catch (e) {
       if (e instanceof AuthError) { onAuthError(e); return }
+      window.alert(`彻底删除失败：${e.message}`)
     } finally { setTrashBusy(false) }
   }
 
@@ -239,12 +241,13 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
     setTrashBusy(true)
     try {
       const r = await authedFetch('/api/papers/trash/empty', { method: 'POST' })
-      const d = await r.json()
-      if (!r.ok) window.alert(d.detail || '清空失败')
-      else if (d.purged < trash.length) window.alert(`部分失败：清空了 ${d.purged}/${trash.length} 篇（其余正在入库或出错，稍后重试）`)
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) { window.alert(d.detail || '清空失败'); return }
+      if (d.purged < trash.length) window.alert(`部分失败：清空了 ${d.purged}/${trash.length} 篇（其余正在入库或出错，稍后重试）`)
       loadTrash(); load()
     } catch (e) {
       if (e instanceof AuthError) { onAuthError(e); return }
+      window.alert(`清空失败：${e.message}`)
     } finally { setTrashBusy(false) }
   }
 

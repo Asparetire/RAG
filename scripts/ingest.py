@@ -191,12 +191,9 @@ def main() -> int:
             tag = "跳过(未变)" if r["skipped"] else f"入库 text={r['n_text']} img={r['n_img']} 降采样={r['downsampled']}"
             print(f"{r['doc_id']}: {tag}")
             results.append(r)
-        # BM25 从 t_chunk 全量重建（单一事实源；~1500 块秒级）
-        units = B.load_units_from_db()
-        idx = B.build_index(units)
-        B.save_index(idx, meta_rows=[{"chunk_id": u["chunk_id"], "doc_id": u["doc_id"],
-                                      "kind": u["kind"]} for u in units])
-        print(f"BM25 重建: {len(units)} 文本单元 → {B.BM25_DIR}")
+        # BM25 从 t_chunk 全量重建（单一事实源；~1500 块秒级；m6-trash m-4：改调共用函数）
+        n_units = B.bm25_rebuild()["units"]
+        print(f"BM25 重建: {n_units} 文本单元 → {B.BM25_DIR}")
     finally:
         conn.close()
         qclient.close()

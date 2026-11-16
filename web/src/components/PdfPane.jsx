@@ -3,7 +3,7 @@
 //   left=x0×100% top=y0×100% width=(x1−x0)×100% height=(y1−y0)×100%，天然随视口缩放。
 // - 页码 1 起（M1 schema）= react-pdf pageNumber 1 起，直接对齐。
 // - 引用点击 → src（{doc_id,page,bbox,...}）→ 打开对应 PDF 并滚动到页 → 高亮框脉冲。
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import 'react-pdf/dist/Page/AnnotationLayer.css'
 import 'react-pdf/dist/Page/TextLayer.css'
@@ -24,6 +24,15 @@ export default function PdfPane({ src, onClose }) {
   const [loadError, setLoadError] = useState(null)
   const containerRef = useRef(null)
   const pageRefs = useRef({})
+
+  // pdf.js 选项 memo 化（react-pdf 对 options 深比较，非 memo 会在控制台刷
+  // "unnecessary reloads" 警告）；组件每次打开重建 → getToken 取当前登录态。
+  const pdfOptions = useMemo(() => ({
+    cMapUrl: CMAP_URL,
+    cMapPacked: true,
+    standardFontDataUrl: STD_FONTS_URL,
+    httpHeaders: { Authorization: `Bearer ${getToken()}` },  // 4.9 鉴权：pdf.js 请求带 Bearer
+  }), [])
 
   useEffect(() => {
     setLoadError(null)
@@ -63,6 +72,11 @@ export default function PdfPane({ src, onClose }) {
       <div className="pdf-scroll" ref={containerRef}>
         <Document
           file={url}
+          // suspense 必须显式关掉：react-pdf 11 默认 suspense=true，走 React 19 use()
+          // 挂起，要求上层有 <Suspense> 边界；本应用没有——挂起后 UI 永远停在
+          // 空灰面板（无加载中/无报错/无页面，2026-11-16 灰块事故根因）。
+          // 关掉后走 effect 加载路径，loading/error props 才真正生效。
+          suspense={false}
           onLoadSuccess={({ numPages: n }) => setNumPages(n)}
           onLoadError={(e) => setLoadError(
             String(e?.message || e).includes('401')
@@ -70,12 +84,7 @@ export default function PdfPane({ src, onClose }) {
               : `PDF 加载失败：${String(e?.message || e).slice(0, 120)}`)}
           loading={<div className="pdf-loading">PDF 加载中…</div>}
           error={<div className="pdf-loading">{loadError || 'PDF 加载失败'}</div>}
-          options={{
-            cMapUrl: CMAP_URL,
-            cMapPacked: true,
-            standardFontDataUrl: STD_FONTS_URL,
-            httpHeaders: { Authorization: `Bearer ${getToken()}` },  // 4.9 鉴权：pdf.js 请求带 Bearer
-          }}
+          options={pdfOptions}
         >
           {Array.from({ length: numPages }, (_, i) => {
             const pageNo = i + 1

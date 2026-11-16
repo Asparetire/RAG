@@ -83,3 +83,11 @@
 - 批准时间：2026-11-16 16:35（Asia/Shanghai）
 - 批准指令原文："yes, 严格使用 tdd-workflow 实施（走 TDD）"
 - TDD：是（RED→GREEN→重构→覆盖率，新增/改动代码覆盖率 ≥80%）
+
+## 执行记录（S2-S5）
+
+- **TDD 循环**：12 个循环（软删/幂等/守卫/恢复/拒绝恢复/purge/拒绝物理删/两处过滤/垃圾桶列表/bm25 编排固化/端点×4）——循环 2/3/10 在 GREEN 时已由前置循环最小实现覆盖（标记"已覆盖"，测试保留固化行为）；其余 RED→GREEN 严格推进。
+- **覆盖率**（新增/改动行）：bm25.bm25_rebuild、paperlib 回收站段 L362-515、api.py 新端点 L358-398 + GET /api/docs 过滤 + 上传去重改动——**100%**（missing 项均为既有代码）。全量 231 passed。
+- **部署冒烟（容器实测，2026-11-16 17:1x）**：删除→removed_points=27→清单/侧栏/Qdrant 全不可见→垃圾桶可见→恢复→**点位 27 回归**→垃圾桶空；磁盘资产完好；卡死任务 37（b056，parsing 2h+）被启动扫描标 failed 可重试；新 bundle index-CTp4u6I4.js 上线；trash 端点无鉴权 401 ✓。
+- **冒烟抓真 bug 一枚**：restore 初版 force=False → doc_hash 未变被 process_doc 增量跳过（零写入）→ 恢复后点位丢失；TDD 补断言 force=True 修复复验通过（commit 9ef6fa4）。
+- **部署插曲**：init_db 幂等补列先行；发现 189e/44a8 两篇的 t_doc 行与解析产物在 15:30-17:10 间被并行会话清理（非本会话操作，PDF 仍在可重入库）；git add -A 误提交并行会话的 17 个 scripts/_diag_* 脚本（已入库，保留避免破坏其工作区）。

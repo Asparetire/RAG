@@ -43,18 +43,26 @@ class FakeCursor:
 
 
 class FakeConn:
-    """pymysql 连接替身：queries 记录 + results 按匹配器路由 canned 行。"""
+    """pymysql 连接替身：queries 记录 + results 按匹配器路由 canned 行；事务计数。"""
 
     def __init__(self, results=None):
         self.queries = []
         self.results = list(results or [])
         self.commits = 0
+        self.begins = 0
+        self.rollbacks = 0
 
     def cursor(self):
         return FakeCursor(self)
 
+    def begin(self):
+        self.begins += 1
+
     def commit(self):
         self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
 
     def close(self):
         pass
@@ -94,24 +102,30 @@ def test_soft_delete_marks_and_evicts(monkeypatch, tmp_path):
     monkeypatch.setattr(qs, "_client", lambda: FakeQdrant())
     monkeypatch.setattr(qs, "delete_doc_points",
                         lambda client, d: removed.update(n=12) or 12)
-    rebuilds = []
-    monkeypatch.setattr(bm25_mod, "bm25_rebuild", lambda: rebuilds.append(1))
+    rebuild_at = []  # 记录重建调用时已执行的 SQL 条数（验顺序用）
+    monkeypatch.setattr(bm25_mod, "bm25_rebuild",
+                        lambda: rebuild_at.append(len(conn.queries)))
 
     out = pl.soft_delete_doc(doc_id)
 
     assert out["ok"] is True and out["removed_points"] == 12
-    assert removed["n"] == 12 and rebuilds, "应摘除 Qdrant 点位并重建 BM25"
-    # 打标 SQL 最后执行，且幂等条件（deleted_at IS NULL）在 WHERE 里
-    updates = [sql for sql, _ in conn.queries if sql.startswith("UPDATE t_doc")]
-    assert updates and "deleted_at IS NULL" in updates[-1]
-    assert updates[-1] == conn.queries[-1][0], "打标应是最后一步（失败可重放）"
+    assert removed["n"] == 12 and rebuild_at, "应摘除 Qdrant 点位并重建 BM25"
+    updates = [i for i, (sql, _) in enumerate(conn.queries) if sql.startswith("UPDATE t_doc")]
+    assert updates and "deleted_at IS NULL" in conn.queries[updates[0]][0]
+    # B-1 修复：语料源按 deleted_at 过滤后，打标必须先于 BM25 重建——
+    # 否则重建语料仍含已删文档，BM25 检索面摘除不成立（审查 B-1）。
+    assert updates[0] < rebuild_at[0], "打标（使语料过滤生效）必须先于 BM25 重建"
     # 软删不动物理文件
     assert pdf.exists() and parsed.exists()
 
 
-# ---------- 用例 2（R1 幂等重放：已在垃圾桶 → 不动检索面） ----------
+# ---------- 用例 2（R1 幂等重放：已在垃圾桶 → 重放摘除自愈） ----------
 
-def test_soft_delete_idempotent_replay(monkeypatch, tmp_path):
+def test_soft_delete_replay_heals(monkeypatch, tmp_path):
+    """重复删除 = 重放摘除（自愈部分失败状态），打标 SQL 幂等不重复置值。
+
+    B-1 修复后不能早退跳过摘除：若上次软删在"打标后、摘除前"中断，
+    重试必须补齐 Qdrant/BM25 摘除，否则检索面残留。"""
     doc_id = "aabbccddeeff"
     conn, pdf, parsed = _setup_doc(tmp_path, doc_id, deleted_at="2026-11-16 16:00:00")
     monkeypatch.setattr(pl, "connect", lambda *a, **k: conn)
@@ -124,8 +138,10 @@ def test_soft_delete_idempotent_replay(monkeypatch, tmp_path):
 
     out = pl.soft_delete_doc(doc_id)
 
-    assert out == {"ok": True, "already": True}
-    assert touched == {"qdrant": 0, "bm25": 0}, "已在垃圾桶：不应重复摘除检索面"
+    assert out["ok"] is True
+    assert touched == {"qdrant": 1, "bm25": 1}, "重复删除应重放摘除（自愈）"
+    updates = [sql for sql, _ in conn.queries if sql.startswith("UPDATE t_doc")]
+    assert updates and "deleted_at IS NULL" in updates[-1], "打标幂等（WHERE 守卫不重复置值）"
 
 
 # ---------- 用例 3（R5 守卫：进行中任务拒绝删除） ----------
@@ -162,18 +178,22 @@ def test_restore_replays_and_clears_flag(monkeypatch, tmp_path):
     replayed = []
     import scripts.ingest as ingest_mod
     monkeypatch.setattr(ingest_mod, "process_doc",
-                        lambda client, q, c, root, force=False: replayed.append((root, force)))
+                        lambda client, q, c, root, force=False: replayed.append((root, force, len(c.queries))))
 
     out = pl.restore_doc(doc_id)
 
     assert out["ok"] is True and out["pdf_ok"] is True
     # 容器冒烟实证：doc_hash 未变时 process_doc 默认增量跳过（零写入）→ 恢复后 Qdrant
     # 点位丢失。恢复必须 force=True 强制重放（嵌入缓存命中，零 API 费用）。
-    assert replayed == [(tmp_path / "parsed" / doc_id, True)], "恢复必须强制重放（force=True）"
+    assert replayed[0][0] == tmp_path / "parsed" / doc_id and replayed[0][1] is True, \
+        "恢复必须强制重放（force=True）"
     assert rebuilds, "恢复后应重建 BM25"
-    clears = [sql for sql, _ in conn.queries
+    # B-1 修复：语料源按 deleted_at 过滤后，清标记必须先于重放与 BM25 重建——
+    # 否则恢复时重建语料仍排除本文档（调研 L61 原定顺序，审查 B-1 修复②）。
+    clears = [i for i, (sql, _) in enumerate(conn.queries)
               if sql.startswith("UPDATE t_doc") and "deleted_at=NULL" in sql]
-    assert clears and conn.queries[-1][0] == clears[-1], "清标记应是最后一步（出现即完整）"
+    assert clears, "清标记 SQL 必须执行"
+    assert clears[0] < replayed[0][2], "清标记必须先于 process_doc 重放"
 
 
 # ---------- 用例 5（R2b：未删除的文档拒绝恢复） ----------
@@ -363,23 +383,21 @@ def test_api_docs_excludes_trashed(monkeypatch):
     assert "deleted_at IS NULL" in sql, "GET /api/docs 必须排除垃圾桶文档"
 
 
-# ---------- 用例 13（守卫补覆盖：论文不存在/格式非法） ----------
+# ---------- 用例 13（守卫补覆盖：论文不存在/格式非法，审查 m-2 语义区分） ----------
 
 def test_functions_reject_missing_or_malformed_doc(monkeypatch):
-    # 格式非法（非 12 位十六进制）→ 不触库直接"论文不存在"
     conn = FakeConn()  # 无路由 → 一切查询返回空
     monkeypatch.setattr(pl, "connect", lambda *a, **k: conn)
     import pytest
+    from doclens.paperlib import PaperNotFoundError
+    # 格式非法（非 12 位十六进制）→ ValueError"格式非法"（API 422）
     for bad in ("zzz", "AABBCCDDEEFF", "aabbccddeeff0"):
-        with pytest.raises(ValueError, match="论文不存在"):
-            pl.soft_delete_doc(bad)
-        with pytest.raises(ValueError, match="论文不存在"):
-            pl.restore_doc(bad)
-        with pytest.raises(ValueError, match="论文不存在"):
-            pl.purge_doc(bad)
-    # 格式合法但库中无行 → 同样"论文不存在"（三个函数各自分支）
+        for fn in (pl.soft_delete_doc, pl.restore_doc, pl.purge_doc):
+            with pytest.raises(ValueError, match="格式非法"):
+                fn(bad)
+    # 格式合法但库中无行 → PaperNotFoundError"论文不存在"（API 404）
     for fn in (pl.soft_delete_doc, pl.restore_doc, pl.purge_doc):
-        with pytest.raises(ValueError, match="论文不存在"):
+        with pytest.raises(PaperNotFoundError, match="论文不存在"):
             fn("aabbccddeeff")
     assert not any(sql.startswith(("DELETE", "UPDATE")) for sql, _ in conn.queries), \
         "不存在的文档不得触发任何写库"
@@ -394,12 +412,15 @@ def test_api_restore_purge_422_and_empty_partial(monkeypatch):
     def _purge(d):
         if d in ("aabbccddeeff", "aaaa00000000"):
             raise ValueError("正在入库")
+        if d == "cccc22222222":
+            raise RuntimeError("qdrant down")  # m-1：非 ValueError 也不得中断清空
         return {"ok": True}
 
     monkeypatch.setattr(pl, "purge_doc", _purge)
     monkeypatch.setattr(pl, "list_trash", lambda: [
         {"doc_id": "aaaa00000000", "title": "x", "n_chunks": 1, "category_id": None, "deleted_at": "d1"},
-        {"doc_id": "bbbb11111111", "title": "y", "n_chunks": 1, "category_id": None, "deleted_at": "d2"}])
+        {"doc_id": "bbbb11111111", "title": "y", "n_chunks": 1, "category_id": None, "deleted_at": "d2"},
+        {"doc_id": "cccc22222222", "title": "z", "n_chunks": 1, "category_id": None, "deleted_at": "d3"}])
     client = _client()
 
     r = client.post("/api/papers/aabbccddeeff/restore")
@@ -408,4 +429,143 @@ def test_api_restore_purge_422_and_empty_partial(monkeypatch):
     assert r.status_code == 422 and "正在入库" in r.json()["detail"]
     r = client.post("/api/papers/trash/empty")
     assert r.status_code == 200
-    assert r.json()["purged"] == 1, "清空逐篇继续：单篇失败不拖垮"
+    assert r.json()["purged"] == 1, "清空逐篇继续：ValueError/RuntimeError 均不拖垮（m-1）"
+
+
+# ---------- 用例 15（B-1 核心回归：BM25 语料源排除垃圾桶文档——sqlite 真库验证） ----------
+
+def test_load_units_and_build_exclude_trashed(monkeypatch):
+    """真跑 SQL 与 build_index：软删（deleted_at 非空）文档的块不得进入 BM25 语料。
+
+    审查 B-1/n-7：此前 17 条测试全部 mock 掉 bm25_rebuild，替身盲区漏过了
+    "重建语料仍含已删文档"的缺陷——本用例用 sqlite 内存库跑真 SQL。"""
+    import sqlite3
+
+    raw = sqlite3.connect(":memory:")
+    import contextlib
+
+    class _SqliteConn:  # pymysql 风格适配：cursor() 支持上下文协议
+        def cursor(self):
+            return contextlib.nullcontext(raw.cursor())
+
+        def close(self):
+            raw.close()
+
+    raw.execute("CREATE TABLE t_chunk (chunk_id TEXT, doc_id TEXT, kind TEXT, content TEXT)")
+    raw.execute("CREATE TABLE t_doc (doc_id TEXT, deleted_at TEXT)")
+    raw.execute("INSERT INTO t_doc VALUES ('aabbccddeeff', NULL), ('4444aaaa4444', '2026-11-16')")
+    raw.execute("INSERT INTO t_chunk VALUES "
+                "('aabbccddeeff:0001','aabbccddeeff','text','live quantum'),"
+                "('4444aaaa4444:0001','4444aaaa4444','text','deleted secret'),"
+                "('aabbccddeeff:0002','aabbccddeeff','image','')")
+    from doclens.index import db as db_mod
+    monkeypatch.setattr(db_mod, "connect", lambda *a, **k: _SqliteConn())
+
+    units = bm25_mod.load_units_from_db()
+    assert [u["doc_id"] for u in units] == ["aabbccddeeff"], "语料源必须排除垃圾桶文档"
+
+    idx = bm25_mod.build_index(units)
+    assert "aabbccddeeff:0001" in idx.chunk_ids and "4444aaaa4444:0001" not in idx.chunk_ids
+    hits = idx.search("quantum", top=5)
+    assert all(cid.split(":")[0] != "4444aaaa4444" for cid, _ in hits)
+    raw.close()
+
+
+# ---------- 用例 16（M-2a：恢复/彻底删除同样拒绝进行中任务） ----------
+
+def test_restore_purge_reject_active_ingest(monkeypatch, tmp_path):
+    doc_id = "aabbccddeeff"
+    conn, pdf, parsed = _setup_doc(tmp_path, doc_id,
+                                   deleted_at="2026-11-16 16:00:00", task_status="parsing")
+    monkeypatch.setattr(pl, "connect", lambda *a, **k: conn)
+    monkeypatch.setattr(pl, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(pl, "PARSED_DIR", tmp_path / "parsed")
+    monkeypatch.setattr(qs, "_client", lambda: FakeQdrant())
+    monkeypatch.setattr(qs, "delete_doc_points", lambda client, d: 0)
+    monkeypatch.setattr(bm25_mod, "bm25_rebuild", lambda: None)
+    import scripts.ingest as ingest_mod
+    monkeypatch.setattr(ingest_mod, "process_doc",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("不应重放")))
+
+    import pytest
+    with pytest.raises(ValueError, match="正在入库"):
+        pl.restore_doc(doc_id)
+    with pytest.raises(ValueError, match="正在入库"):
+        pl.purge_doc(doc_id)
+    assert not any(sql.startswith("DELETE FROM") for sql, _ in conn.queries), \
+        "守卫拒绝时不得有任何破坏性动作"
+
+
+# ---------- 用例 17（M-1：purge 三条 DELETE 包显式事务） ----------
+
+def test_purge_wraps_db_in_transaction(monkeypatch, tmp_path):
+    doc_id = "aabbccddeeff"
+    conn, pdf, parsed = _setup_doc(tmp_path, doc_id, deleted_at="2026-11-16 16:00:00")
+    monkeypatch.setattr(pl, "connect", lambda *a, **k: conn)
+    monkeypatch.setattr(pl, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(pl, "PARSED_DIR", tmp_path / "parsed")
+    monkeypatch.setattr(qs, "_client", lambda: FakeQdrant())
+    monkeypatch.setattr(qs, "delete_doc_points", lambda client, d: 0)
+
+    pl.purge_doc(doc_id)
+
+    assert conn.begins == 1, "autocommit 下三条 DELETE 必须 conn.begin() 包事务（M-1）"
+    assert conn.rollbacks == 0 and conn.commits >= 1
+
+
+# ---------- 用例 18（M-2b：垃圾桶内文档重复入库 → 任务报错引导恢复） ----------
+
+def test_run_ingest_trash_dedupe_errors_out(monkeypatch, tmp_path):
+    doc_id = "aabbccddeeff"
+    data = tmp_path / "data"
+    (data / "pdfs").mkdir(parents=True)
+    src = tmp_path / "upload.pdf"
+    src.write_bytes(b"%PDF-1.4 " + b"x" * 11264)  # 过 10KB 校验
+    conn = FakeConn(results=[
+        (lambda sql, a: "SELECT deleted_at FROM t_doc" in sql, [("2026-11-16 16:00:00",)]),
+    ])
+    from doclens.index import db as db_mod
+    monkeypatch.setattr(pl, "connect", lambda *a, **k: conn)
+    monkeypatch.setattr(db_mod, "connect", lambda *a, **k: conn)  # _run_ingest 内部是局部导入
+    monkeypatch.setattr(pl, "DATA_DIR", data)
+    monkeypatch.setattr(pl, "PARSED_DIR", tmp_path / "parsed")
+    recorded = []
+    monkeypatch.setattr(pl, "update_task",
+                        lambda tid, **kw: recorded.append((kw.get("status"), kw.get("error"))))
+    import re as _re
+    monkeypatch.setattr("doclens.parse.mineru_parser.parse_pdf",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("垃圾桶内文档不应触发解析")))
+
+    pl._run_ingest(999, src, None)
+
+    assert recorded[-1][0] == "error" and "垃圾桶" in (recorded[-1][1] or ""), \
+        "去重命中垃圾桶行 → 任务报错引导恢复，不得静默归档/改分类"
+
+
+# ---------- 用例 19（M-2c：垃圾桶内文档拒绝 retry） ----------
+
+def test_api_retry_rejects_trashed_doc(monkeypatch, tmp_path):
+    conn = FakeConn(results=[
+        (lambda sql, a: "FROM t_ingest_task WHERE id" in sql,
+         [("old.pdf", 3, "aabbccddeeff")]),
+        (lambda sql, a: "SELECT deleted_at FROM t_doc" in sql, [("2026-11-16",)]),
+    ])
+    from doclens.serve import api as api_mod  # retry 用模块级 connect → patch api 命名空间
+    monkeypatch.setattr(api_mod, "connect", lambda *a, **k: conn)
+    monkeypatch.setattr(pl, "_run_ingest",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("垃圾桶内文档不应重试")))
+    client = _client()
+    r = client.post("/api/papers/tasks/9/retry")
+    assert r.status_code == 422 and "垃圾桶" in r.json()["detail"]
+
+
+# ---------- 用例 20（m-2：不存在 404 / 格式非法 422） ----------
+
+def test_api_paper_delete_missing_404_malformed_422(monkeypatch):
+    conn = FakeConn()  # 库中无行
+    monkeypatch.setattr(pl, "connect", lambda *a, **k: conn)
+    client = _client()
+    r = client.delete("/api/papers/aabbccddeeff")
+    assert r.status_code == 404 and "论文不存在" in r.json()["detail"]
+    r = client.delete("/api/papers/zzz")
+    assert r.status_code == 422 and "格式非法" in r.json()["detail"]
