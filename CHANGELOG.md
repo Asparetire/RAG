@@ -180,5 +180,12 @@
 - **修复**：vite.config.js 两个拷贝目标补 `rename: { stripBase: true }` 平铺落位（dist/pdfjs/cmaps 169 文件 + standard_fonts 16 文件），重建后 dist/pdfjs/ 入库；容器经 git 同步后 StaticFiles 即时生效（静态文件按请求读盘，无需重启服务）。
 - 排查手段：隧道探测 `/web/pdfjs/cmaps/Adobe-GB1-0.bcmap` 等 3 个 URL 均 404 实锤；修复后应 200。
 
+## 2026-11-16｜fix：财报论文预览 404——parse_pdf 补 canonical 落盘（脚本路径入库缺 data/pdfs 原件）
+
+- **症状**：论文库点开"司尔特 2024 年度报告"，`GET /api/docs/{doc_id}/pdf` 404——t_doc 有记录（844 块，检索/问答正常）但 `data/pdfs/{doc_id}.pdf` 原件缺失；共 3 篇同症（司尔特/另两篇财报）。
+- **根因**：三篇财报未走网页上传（无 t_ingest_task 记录、pdfs_inbox 无痕）也未走 intake→parse_corpus 批处理（corpus_manifest 无条目）——是临时脚本直调 parse_pdf+入库，该路径不落 canonical；网页上传路径（_run_ingest）有显式 copy2，故 web 入库的论文无此问题。
+- **修复**：`mineru_parser.parse_pdf` 在缓存判定**之前**调新增 `_ensure_canonical(pdf_path, doc_id)`——任何入口解析/增量重跑都自动补齐 canonical（源即 canonical 或目标已存在则跳过，幂等）；单测 +2（拷贝幂等/重试不自拷），cache-hit 测试补 DATA_DIR 打丁，12 passed。
+- **恢复**：MinerU 渲染临时目录 /tmp/docvortex-render-*/input.pdf 是 canonical 的字节级副本（sha256 前缀=doc_id 实证）——189e6dadabc1/44a8759c94e1 两篇据此恢复；司尔特 526144f26443 的临时副本已被系统清理，需用户提供原始 PDF 放入后校验指纹回填。
+
 
 

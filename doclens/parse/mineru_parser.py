@@ -34,7 +34,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from doclens.config import PARSED_DIR, settings
+from doclens.config import DATA_DIR, PARSED_DIR, settings
 from doclens.parse import table_struct
 from doclens.parse.schema import Block, DoclensDoc
 
@@ -313,6 +313,22 @@ def _run_mineru(pdf_path: Path, workdir: Path) -> None:
     ) from last_err
 
 
+def _ensure_canonical(pdf_path: Path, doc_id: str) -> Path:
+    """解析 ⇒ canonical PDF 必在位（PDF 预览/引用定位接口按 data/pdfs/{doc_id}.pdf 取文件）。
+
+    网页上传路径在 paperlib._run_ingest 里已显式落 canonical；但批量脚本/临时脚本
+    直调 parse_pdf 的路径缺这一步 → t_doc 有记录而预览 404（财报泛化包实证）。
+    凡走 parse_pdf 一律补齐：源即 canonical（重试场景）或目标已存在则跳过；
+    放在缓存命中判定之前——旧解析留下的缺失在增量重跑时自动愈合。
+    """
+    canonical = DATA_DIR / "pdfs" / f"{doc_id}.pdf"
+    if canonical.exists() or Path(pdf_path).resolve() == canonical.resolve():
+        return canonical
+    canonical.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(pdf_path, canonical)
+    return canonical
+
+
 def parse_pdf(pdf_path: Path, *, force: bool = False, collect: list | None = None) -> DoclensDoc:
     """解析单篇 PDF → DoclensDoc；sha256 缓存命中直接返回（FR-1.1 增量）。
 
@@ -320,7 +336,9 @@ def parse_pdf(pdf_path: Path, *, force: bool = False, collect: list | None = Non
     """
     pdf_path = Path(pdf_path)
     digest = sha256_of(pdf_path)
-    out_dir = PARSED_DIR / digest[:12]
+    doc_id = digest[:12]
+    _ensure_canonical(pdf_path, doc_id)
+    out_dir = PARSED_DIR / doc_id
     doc_json = out_dir / "doc.json"
     if doc_json.exists() and not force:
         return DoclensDoc.load(doc_json)  # 缓存命中：不重解析

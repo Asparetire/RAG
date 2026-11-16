@@ -137,6 +137,7 @@ def test_parse_pdf_cache_hit(tmp_path, monkeypatch):
     cached.save(parsed_dir / digest[:12] / "doc.json")
 
     monkeypatch.setattr(mp, "PARSED_DIR", parsed_dir)
+    monkeypatch.setattr(mp, "DATA_DIR", tmp_path / "data")
     monkeypatch.setattr(mp, "_resolve_mineru_bin", lambda: (_ for _ in ()).throw(AssertionError("不应调用 MinerU")))
 
     got = parse_pdf(pdf)
@@ -153,3 +154,27 @@ def test_fallback_caption_nearest_prefix():
     ]
     cap = mp._fallback_caption(page_blocks[1], page_blocks, 1)
     assert cap == "Fig. 2 | Accuracy across rounds."  # 离图底边最近者胜
+
+
+def test_ensure_canonical_copies_and_idempotent(tmp_path, monkeypatch):
+    """解析即落 canonical（预览/引用定位依赖）：首次拷贝；目标已存在不覆盖。"""
+    fake_data = tmp_path / "data"
+    monkeypatch.setattr(mp, "DATA_DIR", fake_data)
+    src = tmp_path / "src.pdf"
+    src.write_bytes(b"%PDF-1.4 original")
+    canonical = mp._ensure_canonical(src, "aabbccddeeff")
+    assert canonical == fake_data / "pdfs" / "aabbccddeeff.pdf"
+    assert canonical.read_bytes() == b"%PDF-1.4 original"
+    src.write_bytes(b"%PDF-1.4 changed")
+    mp._ensure_canonical(src, "aabbccddeeff")
+    assert canonical.read_bytes() == b"%PDF-1.4 original"  # 幂等：不覆盖
+
+
+def test_ensure_canonical_skips_when_source_is_canonical(tmp_path, monkeypatch):
+    """重试场景：源文件本身就是 canonical → 不自拷（S3 SameFileError 前车之鉴）。"""
+    fake_data = tmp_path / "data"
+    monkeypatch.setattr(mp, "DATA_DIR", fake_data)
+    canonical = fake_data / "pdfs" / "aabbccddeeff.pdf"
+    canonical.parent.mkdir(parents=True)
+    canonical.write_bytes(b"%PDF-1.4 canonical")
+    assert mp._ensure_canonical(canonical, "aabbccddeeff") == canonical
