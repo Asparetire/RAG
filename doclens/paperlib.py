@@ -210,6 +210,20 @@ def ensure_default_category() -> int:
         conn.close()
 
 
+def ensure_default_category_and_assign(doc_id: str) -> int:
+    """未指定分类的论文归入"未分类"（4.8 体检：NULL 与未分类节点语义对齐——
+    不留 NULL，否则前端点"未分类"标签过滤不到）。"""
+    cat_id = ensure_default_category()
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE t_doc SET category_id=%s WHERE doc_id=%s", (cat_id, doc_id))
+        conn.commit()
+        return cat_id
+    finally:
+        conn.close()
+
+
 # ---------- 论文列表 ----------
 
 def list_papers(user_id: str | None = None) -> list[dict]:
@@ -413,6 +427,9 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
             # 5) 分类归属 + 完成态
             if category_id:
                 assign_category(doc.doc_id, category_id)
+            else:
+                # 未指定分类 → 归入"未分类"节点（4.8 体检：NULL 与未分类节点语义对齐）
+                ensure_default_category_and_assign(doc.doc_id)
             # 标题兜底（4.8 交互优化）：MinerU 提取失败时从 markdown 一级标题回填
             if not (doc.title or "").strip():
                 from doclens.paperlib import backfill_title_from_markdown as _bf
