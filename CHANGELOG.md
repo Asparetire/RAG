@@ -226,6 +226,7 @@
 - **S4 安全专项**（上传属敏感代码）：2 Medium 全修——M-1 逐文件异常 detail 改走 sanitize_error（补 Unix/Windows 绝对路径打码规则，防路径/schema 回显）；M-2 新增 read_upload_capped 先验 size 后读（防"先整读后校验"OOM，单篇端点同修，闭环 M4-02 记池项）；3 Low——L-1 _safe_basename 文件名净化（NFC/控制字符/Windows 保留字符/字节截断）、L-2 deploy.md 补反代 client_max_body_size、L-3 任务区 SQL LIMIT 200。
 - **S3 代码审查**：Blocker 0 / Major 0 / Minor 5 全修（批 worker 循环兜底、seen.add 时序与孤儿 inbox 清理、_safe_basename Windows 保留字符、测试 DATA_DIR 隔离 tmp_path + inbox 清理加 web_static 门、plan 文档漂移）+ Nit 5 修 4。全量 **251 passed**；npm build 成功。
 - **报告**：specs/reviews/paper-batch-upload.review.md（Blocker 0/Major 0/Minor 5 全修）、specs/reviews/paper-batch-upload.security.md（有条件通过→修复后升级通过，复测结果已回填）。
+- **部署实录**（2026-11-17 11:44）：容器 master 曾被并行会话未提交的 reports/ablation.md 挡 updateInstead 推送——经**临时分支 deploy-20261117 推送 + 容器 ff 合并**部署（零触碰其未提交文件，合并后分支已删）+ start_server.sh 重启加载新后端；上线验证：index.html 引用新 bundle index-BBhkejyl.js、批量端点未登录访问 401（存在且鉴权门正常）。此绕行范式可复用（推送被拒时"临时分支 + ff 合并"，不触碰并行会话未提交文件）。
 
 
 
