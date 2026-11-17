@@ -237,6 +237,15 @@
 - **过程深坑实录**（财报大 PDF 与并行会话交叉实测）：ingest reused 作用域回归（M2 潜伏，图像入库必炸）+后台线程事件循环冲突+pymysql 2.x begin() 语义（显式事务改造）+SameFileError+**多实例竞争**（跨进程锁无效→8 实例互踩→清场单实例纪律）+招行年报 MinerU 卡死（GPU 竞争雪上加霜）——全部有 commit 与诊断记录。
 - **测试**：212→251 passed（含并行会话与回收站 TDD 用例）。**M5 评测数据**：五套件 4293 条指标+消融结论（A 0.186→C 0.354→D 0.495）+BEIR SciFact 0.736——详见上方 M5 条目与 reports/ablation.md。
 
+## 2026-11-17｜env：灾备机制上线——/home/backup 每日自动备份+容器重建恢复手册
+
+- **背景**：服务器清空只保留 /home——/home/doclens 下代码/论文 PDF/解析产物/.env/Qdrant 本体与 storage 天然保留；缺口仅 MySQL 数据(/var/lib/mysql)、Python 环境(/opt/conda 2.6G)、MinerU 模型(/root/.mineru 2.0G)。
+- **脚本**：`/home/doclens/backup.sh`（仓库源码副本 scripts/backup.sh）——每日 `mysqldump --single-transaction`（18M gz）+ Qdrant 快照 API 下载（doclens_text 69M+doclens_image 11M）+ .env + 建号 SQL 说明，保留最近 7 份轮换；`--full` 追加 conda/MinerU 环境大包（环境变更后手动跑）。
+- **定时**：容器原生无 cron → 已 `apt install cron` 并挂 `/etc/cron.d/doclens-backup`（每日 03:00，日志 /home/backup/backup.log）；容器重建后按脚本头部清单重挂。
+- **恢复手册**：backup.sh 头部内嵌 7 步（装 mysql/cron → 解 conda/MinerU 包 → 导 dump+建号 → 起 qdrant → start_server.sh）。
+- **验证**：dump 导入临时库演练通过（9 表/29 文档/3925 块完整还原后清理）；快照双集合 80M 落盘。
+- **注意**：备份目录含 .env（全部密钥）——**不要外传、不要提交 git**；磁盘 97% 占用，full 大包注意余量。
+
 
 
 
