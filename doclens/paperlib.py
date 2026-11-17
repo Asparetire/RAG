@@ -22,6 +22,7 @@ import json
 import shutil
 import threading
 import time
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from doclens.index.db import connect
 MAX_CATEGORY_DEPTH = 3          # FastGPT maxFolderDepth 同款（根=1 层）
 STALE_TASK_SECONDS = 3600       # 启动扫描阈值：processing 超 1h 视为中断（open-webui 口径）
 UPLOAD_MAX_BYTES = 100 * 1024 * 1024  # MaxKB 口径 100MB
+MAX_BATCH_FILES = 20            # 批量上传单批上限（任务列表/线程量级保护；2026-11-17 批量入库）
 
 MANIFEST_PATH = DATA_DIR / "corpus_manifest.json"
 _INGEST_LOCK = threading.Lock()  # 单机串行化入库（嵌入批/连接池量级），防并发重复建索引
@@ -309,17 +311,25 @@ def update_task(task_id: int, *, status: str | None = None, progress: float | No
 
 
 def list_active_tasks() -> list[dict]:
-    """进行中任务（4.8 体检增补：上传后论文未进 t_doc 前也要在库里可见——RAGFlow
-    范式的"列表顶部显示 uploading/processing 状态机"）。"""
+    """任务区数据源（4.8 体检增补：上传后论文未进 t_doc 前也要在库里可见——RAGFlow
+    范式的"列表顶部显示 uploading/processing 状态机"）。
+
+    R1 失败可见性（2026-11-17，调研 [D4]）：error 任务此前被 SQL 过滤——失败瞬间
+    从 UI 消失、重试无从下手。现纳入 24h 内的 error 行；终态不驱动前端轮询
+    （PaperLibrary 轮询条件同步改为仅非终态）。
+    S4 L-3（2026-11-17 安全复查）：LIMIT 200 有界化（防异常自堆撑大响应体），
+    DESC 取最新再回正序展示。"""
     conn = connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, batch_id, filename, status, progress, progress_msg, error, doc_id "
-                "FROM t_ingest_task WHERE status IN ('queued','parsing','indexing') ORDER BY id")
+                "FROM t_ingest_task WHERE status IN ('queued','parsing','indexing') "
+                "OR (status='error' AND updated_at > NOW() - INTERVAL 1 DAY) "
+                "ORDER BY id DESC LIMIT 200")
             return [{"task_id": r[0], "batch_id": r[1], "filename": r[2], "status": r[3],
                      "progress": r[4], "progress_msg": r[5], "error": r[6], "doc_id": r[7]}
-                    for r in cur.fetchall()]
+                    for r in reversed(cur.fetchall())]
     finally:
         conn.close()
 
@@ -581,6 +591,7 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
                             completed_chunks=None, total_chunks=None)
                 if category_id:
                     assign_category(doc_id, category_id)
+                _cleanup_inbox_file(pdf_path)
                 return
 
             # 2) MinerU 解析（subprocess，含重试/缓存；最耗时一步）
@@ -622,6 +633,8 @@ def _run_ingest(task_id: int, pdf_path: Path, category_id: int | None) -> None:
             update_task(task_id, status="completed", progress=1.0,
                         progress_msg=f"入库完成 text={r['n_text']} img={r['n_img']}",
                         completed_chunks=r["n_text"], total_chunks=r["n_text"] + r["n_img"])
+            # R4：消费即清（paperless-ngx [P1]）——成功后清 inbox 原件（canonical 保留）
+            _cleanup_inbox_file(pdf_path)
         except Exception as exc:  # noqa: BLE001 任务侧兜底：错误文本落库（dify 范式）
             # S4 M4-05：error 文本与 SSE error 同口径脱敏（防路径/凭据片段入库回显）
             from doclens.serve.sanitize import sanitize_error
@@ -636,6 +649,41 @@ def _sha256_of(path: Path) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _cleanup_inbox_file(pdf_path: Path) -> bool:
+    """R4（对照 paperless-ngx"消费即清"，[P1]）：入库成功后清理 inbox 原件。
+
+    仅删 pdfs_inbox 下的文件——重试等路径传的是 canonical（data/pdfs/），
+    绝不能误删 canonical；失败任务保留 inbox 供人工排查。返回是否删除。
+    """
+    try:
+        p = Path(pdf_path)
+        if p.resolve().parent == (DATA_DIR / "pdfs_inbox").resolve() and p.is_file():
+            p.unlink()
+            return True
+    except OSError:
+        pass
+    return False
+
+
+def sweep_old_inbox_files(days: int = 7) -> int:
+    """R4 启动清理：inbox 里超过 days 天的遗留原件删除（重试链路用的是 canonical，
+    inbox 原件成败皆不再回看——2026-11-16 b056 实证只写不清、永久堆积）。
+    返回删除数。"""
+    inbox = DATA_DIR / "pdfs_inbox"
+    if not inbox.is_dir():
+        return 0
+    cutoff = time.time() - days * 86400
+    n = 0
+    for p in inbox.iterdir():
+        try:
+            if p.is_file() and p.stat().st_mtime < cutoff:
+                p.unlink()
+                n += 1
+        except OSError:
+            continue
+    return n
 
 
 def assign_category(doc_id: str, category_id: int | None) -> None:
@@ -705,3 +753,45 @@ def validate_upload(filename: str, size: int) -> str | None:
     if size < 10 * 1024:
         return "文件过小，疑似损坏"
     return None
+
+
+def read_upload_capped(upload_file, filename: str) -> tuple[bytes | None, str | None]:
+    """S4 M-2（2026-11-17 批量上传安全复查，M4-02 记池项闭环）：先取 size 校验上限
+    再读内容——防"先整读后校验"（>100MB 的 part 先全量进 RAM 再被拒 → OOM 面）。
+
+    upload_file.file 为 Starlette SpooledTemporaryFile，可 seek。返回
+    (contents, None) 或 (None, 错误文案)。
+    """
+    f = upload_file.file
+    f.seek(0, 2)  # SEEK_END
+    size = f.tell()
+    f.seek(0)
+    err = validate_upload(filename, size)
+    if err:
+        return None, err
+    contents = f.read(UPLOAD_MAX_BYTES + 1)
+    if len(contents) > UPLOAD_MAX_BYTES:  # size 报告与实际不符时的兜底（畸形 part）
+        return None, "文件超过 100MB 上限"
+    return contents, None
+
+
+def _safe_basename(filename: str, max_bytes: int = 200) -> str:
+    """S4 L-1（2026-11-17 批量上传安全复查）：上传文件名净化。
+
+    NFC 归一 + 删控制/格式字符（\\n 合法文件名、U+202E 显示倒序欺骗）+ 分隔符剔除
+    （穿越面已由调用方闭合，此处管落盘/DB 卫生）+ UTF-8 字节截断（ext4 与
+    VARCHAR(255) 均 255 字节上限——超长 OSError 正是 L-1 触发 M-1 泄露的源头）。
+    """
+    s = unicodedata.normalize("NFC", filename or "")
+    s = "".join(ch for ch in s
+                if unicodedata.category(ch) not in ("Cc", "Cf")
+                and ch not in "/\\<>:\"|?*")  # S3 M-3：Windows 保留字符（FR-7.1 交付面）
+    s = s.strip() or "paper.pdf"
+    had_pdf = s.lower().endswith(".pdf")
+    raw = s.encode("utf-8")
+    if len(raw) > max_bytes:
+        limit = max_bytes - (4 if had_pdf else 0)  # 预留 .pdf 后缀的 4 字节
+        s = raw[:limit].decode("utf-8", errors="ignore") or "paper.pdf"
+    if had_pdf and not s.lower().endswith(".pdf"):
+        s += ".pdf"
+    return s

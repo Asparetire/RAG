@@ -71,3 +71,14 @@ def test_sanitize_error_masks_keys():
     assert "sk-ZZZZZZ1234567890" not in out    # sk- 形态保留前 6 位便于排查，主体打码
     assert "sk-ZZZZZZ***" in out
     assert "api_key=***" in out
+
+
+def test_sanitize_error_masks_absolute_paths():
+    """S4 M-1（2026-11-17 批量上传复查）：OSError 常内嵌服务器路径——Unix/Windows 两种形态都打码。"""
+    from doclens.serve.api import _sanitize_error
+    out = _sanitize_error("db error at /home/doclens/RAG/data/pdfs_inbox/x.pdf")
+    assert "/home/doclens" not in out and "<path>" in out
+    out2 = _sanitize_error("write failed on D:\\Project\\RAG\\data\\pdfs_inbox\\y.pdf")
+    assert "D:\\Project" not in out2 and "<path>" in out2
+    # 无路径的普通文案不受影响
+    assert _sanitize_error("该论文在垃圾桶中，请先恢复后再上传") == "该论文在垃圾桶中，请先恢复后再上传"

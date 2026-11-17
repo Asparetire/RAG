@@ -64,6 +64,25 @@ def _sanitize_error(exc: BaseException) -> str:
     return sanitize_error(exc)
 
 
+def _run_batch_worker(staged: list[tuple[int, Path]], cat_id: int | None) -> None:
+    """批量入库 worker（模块级便于测试打桩）：整批串行逐个 `_run_ingest`。
+
+    串行是有意为之——并发解析是 2026-11-16 孤儿进程事故的算力放大器；
+    `_INGEST_LOCK` 在 _run_ingest 内部再保证跨批互斥。单任务失败不中断
+    批内后续（_run_ingest 自带异常兜底落 error）。
+    S3 M-1：_run_ingest 的 error 落库路径再抛异常（如 DB 瞬断）时逐任务
+    兜底——防击穿循环导致批内剩余任务滞留 queued、前端轮询永转。
+    """
+    import logging
+    from doclens import paperlib
+    for task_id, dest in staged:
+        try:
+            paperlib._run_ingest(task_id, dest, cat_id)
+        except Exception:  # noqa: BLE001 最后防线：保证批内后续任务仍被处理
+            logging.getLogger("uvicorn.error").exception(
+                "批量入库：任务 %s 兜底异常（批内继续）", task_id)
+
+
 def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
     """应用工厂；pipeline 仅供测试注入（默认 doclens.pipeline.run_pipeline）。
 
@@ -219,6 +238,17 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
                     "启动扫描：%d 个超时任务标记为 failed", swept)
         except Exception:  # noqa: BLE001 扫描失败不阻塞启动（表未建等场景）
             logging.getLogger("uvicorn.error").exception("启动扫描失败")
+        # 2026-11-17 R4（批量入库调研）：inbox 只写不清——启动时清理超期（7 天）孤儿原件。
+        # S3 M-4：文件删除有破坏性——仅在交付态（WEB_STATIC=1）执行；pytest/开发环境
+        # 的 create_app 不触真实 inbox（否则跑测试即删真实数据）。
+        if settings.web_static:
+            try:
+                swept_inbox = paperlib.sweep_old_inbox_files()
+                if swept_inbox:
+                    logging.getLogger("uvicorn.error").warning(
+                        "启动扫描：%d 个超期 inbox 原件已清理", swept_inbox)
+            except Exception:  # noqa: BLE001 清理失败不阻塞启动
+                logging.getLogger("uvicorn.error").exception("inbox 启动清理失败")
         # 2026-11-16：评测跑批同款兜底——daemon 线程不跨重启，遗留 running 标 error
         # （实证：gen_model-20261116-145758 被 15:03 重启击杀后永挂 running 0/100）
         from doclens.eval import ablation as eval_ablation
@@ -251,10 +281,10 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         前端 FormData 字段被静默忽略（"上传到当前分类"失效）。
         """
         from doclens import paperlib
-        contents = file.file.read()
-        err = paperlib.validate_upload(file.filename or "", len(contents))
-        if err:
-            raise HTTPException(status_code=422, detail=err)
+        # S4 M-2：先取 size 校验上限再读内容（M4-02 记池项闭环——防"先整读后校验"OOM）
+        contents, verr = paperlib.read_upload_capped(file, file.filename or "paper.pdf")
+        if verr:
+            raise HTTPException(status_code=422, detail=verr)
         # sha256 去重前置检查（文件级，秒回常见重复；m6-trash：区分"在垃圾桶"给恢复引导）
         import hashlib
         doc_id = hashlib.sha256(contents).hexdigest()[:12]
@@ -275,15 +305,99 @@ def create_app(pipeline=None, *, auth_enabled: bool | None = None) -> FastAPI:
         batch_id = uuid.uuid4().hex
         inbox = DATA_DIR / "pdfs_inbox"
         inbox.mkdir(parents=True, exist_ok=True)
-        safe_name = (file.filename or "paper.pdf").replace("/", "_").replace("\\", "_")
+        safe_name = paperlib._safe_basename(file.filename or "paper.pdf")
+        fname = safe_name
         dest = inbox / f"{doc_id}_{int(time.time())}_{safe_name}"
         dest.write_bytes(contents)
 
         cat_id = category_id or paperlib.ensure_default_category()
-        task_id = paperlib.create_task(file.filename, cat_id, batch_id)
+        task_id = paperlib.create_task(fname, cat_id, batch_id)
         threading.Thread(target=paperlib._run_ingest, args=(task_id, dest, cat_id),
                          daemon=True, name=f"ingest-{task_id}").start()
         return {"batch_id": batch_id, "task_id": task_id, "doc_id": doc_id}
+
+    @protected.post("/api/papers/upload-batch")
+    def api_papers_upload_batch(files: Annotated[list[UploadFile], File()],
+                                category_id: Annotated[int | None, Form()] = None):
+        """multipart 批量上传（2026-11-17，调研 specs/research/paper-management-survey.md 方案 B）：
+
+        逐文件校验/去重/落盘/建任务——单文件失败仅跳过该文件，不拖垮整批；
+        整批一个后台线程串行 `_run_ingest`（_INGEST_LOCK 跨批串行；并发解析是
+        2026-11-16 孤儿进程事故的算力放大器，坚决不复现）。响应逐文件结果：
+        action ∈ queued | skipped_duplicate | skipped_trash | skipped_invalid。
+        上限 paperlib.MAX_BATCH_FILES（20）。
+        """
+        from doclens import paperlib
+        if len(files) > paperlib.MAX_BATCH_FILES:
+            raise HTTPException(status_code=422,
+                                detail=f"单批最多 {paperlib.MAX_BATCH_FILES} 个文件，请分批上传")
+        import hashlib
+        from doclens.index.db import connect  # 局部导入：测试注入场景可不触库（同 api_docs 模式）
+        batch_id = uuid.uuid4().hex
+        cat_id = category_id or paperlib.ensure_default_category()
+        inbox = DATA_DIR / "pdfs_inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        results: list[dict] = []
+        staged: list[tuple[int, Path]] = []
+        seen: set[str] = set()
+        from doclens.serve.sanitize import sanitize_error
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                for f in files:
+                    fname = f.filename or "paper.pdf"  # N-4：原始名先行，净化在 try 内（S3 M-2）
+                    dest = None
+                    try:
+                        fname = paperlib._safe_basename(fname)
+                        # S4 M-2：先取 size 校验上限再读内容（防"先整读后校验"OOM）
+                        contents, verr = paperlib.read_upload_capped(f, fname)
+                        if verr:
+                            results.append({"filename": fname, "action": "skipped_invalid", "detail": verr})
+                            continue
+                        doc_id = hashlib.sha256(contents).hexdigest()[:12]
+                        if doc_id in seen:  # 批内去重：同内容文件只收第一个
+                            results.append({"filename": fname, "doc_id": doc_id,
+                                            "action": "skipped_duplicate",
+                                            "detail": "本批内已有相同内容文件"})
+                            continue
+                        # 跨库去重：t_doc 已有（含垃圾桶区分引导，语义同单文件端点 409）
+                        cur.execute("SELECT deleted_at FROM t_doc WHERE doc_id=%s", (doc_id,))
+                        row = cur.fetchone()
+                        if row:
+                            if row[0] is not None:
+                                results.append({"filename": fname, "doc_id": doc_id,
+                                                "action": "skipped_trash",
+                                                "detail": f"该论文在垃圾桶中，请先恢复后再上传（与 {doc_id} 同内容）"})
+                            else:
+                                results.append({"filename": fname, "doc_id": doc_id,
+                                                "action": "skipped_duplicate",
+                                                "detail": f"与已入库论文 {doc_id} 内容相同（sha256 重复）"})
+                            continue
+                        safe_name = fname
+                        dest = inbox / f"{doc_id}_{int(time.time())}_{safe_name}"
+                        dest.write_bytes(contents)
+                        task_id = paperlib.create_task(fname, cat_id, batch_id)
+                        seen.add(doc_id)  # S3 M-2：建任务成功才入 seen（失败不误报批内重复）
+                        staged.append((task_id, dest))
+                        results.append({"filename": fname, "doc_id": doc_id, "action": "queued",
+                                        "detail": "已入队解析", "task_id": task_id})
+                    except Exception as exc:  # noqa: BLE001 单文件异常隔离（不拖垮整批）
+                        # S3 M-2：建任务失败不留孤儿 inbox 文件（成功路径由 _run_ingest 消费即清）
+                        if dest is not None and dest.exists():
+                            try:
+                                dest.unlink()
+                            except OSError:
+                                pass
+                        # S4 M-1：detail 走统一脱敏口径——原始异常常内嵌服务器绝对路径/
+                        # schema/host:port，不得原样回显（全项目唯一回显点，2026-11-17 复查）
+                        results.append({"filename": fname, "action": "skipped_invalid",
+                                        "detail": f"处理失败：{sanitize_error(exc)[:140]}"})
+        finally:
+            conn.close()
+        if staged:
+            threading.Thread(target=_run_batch_worker, args=(staged, cat_id), daemon=True,
+                             name=f"ingest-batch-{batch_id[:8]}").start()
+        return {"batch_id": batch_id, "results": results}
 
     @protected.get("/api/papers/tasks/{batch_id}")
     def api_papers_tasks(batch_id: str):

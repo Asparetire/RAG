@@ -2,7 +2,7 @@
 // 左侧=分类树（可折叠，FastGPT 式下钻）+ 右侧=论文表格（RAGFlow 式状态列）+ 上传入口。
 // 上传入口=当前选中分类上下文（进入分类后上传即落入，open-webui 惯例，不弹窗选分类）。
 // 状态徽标=queued/parsing/indexing/completed/error（dify 粒度）+ 进度条 + 失败重试。
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { authedFetch, AuthError } from '../auth.js'
 const STATUS_META = {
   queued: { label: '排队中', cls: 'st-queued' },
@@ -91,7 +91,9 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
   const [activeCat, setActiveCat] = useState(null) // null=全部
   const [uploading, setUploading] = useState(false)
   const [uploadMsg, setUploadMsg] = useState(null)
-  const [pendingFile, setPendingFile] = useState(null)
+  const [pendingFiles, setPendingFiles] = useState([])  // 批量上传：多选文件数组
+  const [retryingId, setRetryingId] = useState(null)    // R2：正在重试的任务 id
+  const fileInputRef = useRef(null)                     // N-3：上传成功后重置 input 显示
   // 垃圾桶（m6-trash）：软删列表 + 恢复/彻底删除/清空
   const [trash, setTrash] = useState([])
   const [trashBusy, setTrashBusy] = useState(false)
@@ -122,8 +124,9 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
     }
   }, [onAuthError])
 
-  // 轮询：只要有进行中任务或刚提交的 batch，就每 2.5s 刷新一次（全部终态即停）
-  const hasActive = activeTasks.length > 0
+  // R1：轮询条件=仅非终态（error/completed 是终态，error 行常驻任务区不能让轮询永转）
+  const hasActive = activeTasks.some(
+    (t) => t.status === 'queued' || t.status === 'parsing' || t.status === 'indexing')
   useEffect(() => {
     if (!hasActive) return undefined
     const timer = setInterval(load, 2500)
@@ -131,29 +134,72 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
   }, [hasActive, load])
 
   const doUpload = async () => {
-    if (!pendingFile) return
+    if (!pendingFiles.length) return
     setUploading(true)
     setUploadMsg(null)
     try {
       const body = new FormData()
-      body.append('file', pendingFile)
       if (activeCat != null) body.append('category_id', activeCat)
-      const r = await authedFetch('/api/papers/upload', { method: 'POST', body })
-      const data = await r.json()
-      if (r.status === 409) {
-        setUploadMsg(`重复：${data.detail}`)
-      } else if (!r.ok) {
-        setUploadMsg(`上传失败：${data.detail || r.status}`)
-      } else {
+      let data = null
+      if (pendingFiles.length === 1) {
+        // 单文件：走既有单篇端点（保留 409 垃圾桶引导等既有语义）
+        body.append('file', pendingFiles[0])
+        const r = await authedFetch('/api/papers/upload', { method: 'POST', body })
+        data = await r.json()
+        if (r.status === 409) { setUploadMsg(`重复：${data.detail}`); return }
+        if (!r.ok) { setUploadMsg(`上传失败：${data.detail || r.status}`); return }
         setUploadMsg(`已提交入库任务（${data.doc_id}），完成后立即可问答`)
-        load()   // 立即刷新：新任务出现在"进行中"区
+      } else {
+        // 多文件：走批量端点（逐文件失败隔离，RAGFlow 多 file 字段范式）
+        for (const f of pendingFiles) body.append('files', f)
+        const r = await authedFetch('/api/papers/upload-batch', { method: 'POST', body })
+        data = await r.json()
+        if (!r.ok) { setUploadMsg(`上传失败：${data.detail || r.status}`); return }
+        const queued = data.results.filter((x) => x.action === 'queued')
+        const skipped = data.results.filter((x) => x.action !== 'queued')
+        const lines = [`已提交 ${queued.length} 个入库任务`]
+        for (const s of skipped) lines.push(`跳过 ${s.filename}：${s.detail}`)
+        setUploadMsg(lines.join('；'))
       }
+      // N-3：成功提交后清空已选（失败/重复提示路径保留选择，便于修正后重传）
+      setPendingFiles([])
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      load()   // 立即刷新：新任务出现在任务区
     } catch (e) {
       if (e instanceof AuthError) { onAuthError(e); return }
       setUploadMsg(`上传失败：${e.message}`)
     } finally {
       setUploading(false)
     }
+  }
+
+  // R2：失败任务重试（接既有 /retry 端点；doc_id 为空的失败任务无法重试）
+  const retryTask = async (taskId) => {
+    setRetryingId(taskId)
+    try {
+      const r = await authedFetch(`/api/papers/tasks/${taskId}/retry`, { method: 'POST' })
+      const d = await r.json()
+      if (!r.ok) { setUploadMsg(`重试失败：${d.detail || r.status}`); return }
+      setUploadMsg('已重新提交入库任务')
+      load()
+    } catch (e) {
+      if (e instanceof AuthError) { onAuthError(e); return }
+      setUploadMsg(`重试失败：${e.message}`)
+    } finally {
+      setRetryingId(null)
+    }
+  }
+
+  // R3：失败原因展示层翻译（原始异常保留在悬浮提示 title）
+  function friendlyError(err) {
+    const s = String(err || '')
+    if (/timed out|超时/i.test(s)) return '解析超时（机器繁忙）——建议错峰（如清晨）重试'
+    if (/服务重启/.test(s)) return '服务重启导致任务中断，可点重试'
+    if (/垃圾桶/.test(s)) return s   // 已是可读行动引导
+    if (/重复/.test(s)) return s
+    if (/MinerU|解析失败|parse/i.test(s)) return '文档解析失败：文件可能损坏/加密或为扫描件，检查后重试或换文件'
+    if (/嵌入|embedding|\bARK\b|API key/i.test(s)) return '模型服务调用失败，请稍后重试'
+    return s.slice(0, 80)
   }
 
   // ---- 模态框状态（S3 体检/用户反馈：prompt 填 ID 体验差 → 下拉选择式）----
@@ -290,10 +336,15 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
           <div className="library-upload-hint">
             上传到：<b>{activeCat == null ? '未分类' : (categories.find((c) => c.id === activeCat)?.name || '未分类')}</b>
           </div>
-          <input type="file" accept="application/pdf"
-                 onChange={(e) => setPendingFile(e.target.files?.[0] || null)} />
-          <button className="btn send" disabled={!pendingFile || uploading} onClick={doUpload}>
-            {uploading ? '提交中…' : '上传并入库'}
+          <input ref={fileInputRef} type="file" accept="application/pdf" multiple
+                 onChange={(e) => {
+                   setPendingFiles(Array.from(e.target.files || []))
+                 }} />
+          {pendingFiles.length > 1 && (
+            <div className="library-upload-hint">已选 {pendingFiles.length} 个文件（将逐个解析入库）</div>
+          )}
+          <button className="btn send" disabled={!pendingFiles.length || uploading} onClick={doUpload}>
+            {uploading ? '提交中…' : pendingFiles.length > 1 ? `批量上传入库（${pendingFiles.length}）` : '上传并入库'}
           </button>
           {uploadMsg && <div className="upload-msg">{uploadMsg}</div>}
         </div>
@@ -301,19 +352,35 @@ export default function PaperLibrary({ onOpenPaper, onAuthError }) {
       <div className="library-main">
         {activeTasks.length > 0 && (
           <div className="active-tasks">
-            <div className="active-tasks-head">进行中的入库任务（{activeTasks.length}）</div>
-            {activeTasks.map((t) => (
-              <div key={t.task_id} className="active-task">
-                <span className="at-file">{t.filename}</span>
-                <span className={`badge ${t.status === 'indexing' ? 'st-running' : 'st-queued'}`}>
-                  {t.status === 'queued' ? '排队中' : t.status === 'parsing' ? '解析中' : '索引中'}
-                  {' '}{Math.round((t.progress || 0) * 100)}%
-                </span>
-                <div className="at-progress"><div className="at-bar"
-                     style={{ width: `${Math.round((t.progress || 0) * 100)}%` }} /></div>
-                <span className="at-msg">{(t.progress_msg || '').slice(0, 60)}</span>
-              </div>
-            ))}
+            <div className="active-tasks-head">入库任务（{activeTasks.length}）</div>
+            {activeTasks.map((t) => {
+              const meta = STATUS_META[t.status] || { label: t.status, cls: 'st-queued' }
+              const isTerminal = t.status === 'completed' || t.status === 'error'
+              return (
+                <div key={t.task_id} className="active-task">
+                  <span className="at-file">{t.filename}</span>
+                  <span className={`badge ${meta.cls}`} title={t.error || t.progress_msg || ''}>
+                    {meta.label}
+                    {t.status === 'error' && t.error ? `：${friendlyError(t.error).slice(0, 60)}` : ''}
+                    {!isTerminal ? ` ${Math.round((t.progress || 0) * 100)}%` : ''}
+                  </span>
+                  {!isTerminal && (
+                    <div className="at-progress"><div className="at-bar"
+                         style={{ width: `${Math.round((t.progress || 0) * 100)}%` }} /></div>
+                  )}
+                  <span className="at-msg">{(t.progress_msg || '').slice(0, 60)}</span>
+                  {t.status === 'error' && t.doc_id && (
+                    <button className="link-btn" disabled={retryingId === t.task_id}
+                            onClick={() => retryTask(t.task_id)}>
+                      {retryingId === t.task_id ? '提交中…' : '重试'}
+                    </button>
+                  )}
+                  {t.status === 'error' && !t.doc_id && (
+                    <span className="at-msg">无法自动重试，请重新上传</span>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
         <table className="paper-table">

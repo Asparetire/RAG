@@ -218,6 +218,15 @@
 - **处置**：pkill 4 个零产出僵尸进程（load 122→96）；retry 端点重触发论文解析（任务 38，22:58 起）；容器 .env 追加 `MINERU_TIMEOUT=5400`（默认 1800s 在 GPU 高峰期不够，下次重启生效）。
 - **遗留待办**：①重启后孤儿解析进程无自动清理——需任务取消时按进程组 killpg（实现需与回收站会话协调，本轮先记录）；②GPU 高峰期解析速度不可控，大批量入库/财报解析建议错峰；③并行会话同时对 b056 发起 serial 解析（产物同 doc.json 幂等无害，属重复劳动）。
 
+## 2026-11-17｜feat：论文批量入库 + 失败处理四件套（调研→计划→实现→S3/S4 双审查）
+
+- **批量入库**：新增 `POST /api/papers/upload-batch`（一个请求 N 个 file 字段，RAGFlow 同款）——逐文件校验/去重/建任务，单文件失败仅跳过不拖垮整批；整批 1 个 worker 线程**串行** `_run_ingest`（并发解析是 2026-11-16 孤儿事故的算力放大器，坚决不复现）；批内去重 + 跨库去重"跳过并提示"（垃圾桶区分引导）；上限 20 文件/批。前端多选（≥2 个走批量端点，1 个走既有单篇端点零回归）+ 汇总提示 + 逐任务轮询。
+- **失败处理四件套**（调研 R1–R4）：①**R1 失败可见性**——list_active_tasks 纳入 24h 内 error 行（此前失败任务从 UI 隐身），前端任务区改"入库任务"含 error 徽标；②**R2 重试按钮**——失败任务行接既有 /retry 端点（此前是孤岛），doc_id 为空的提示重新上传；③**R3 原因可读化**——friendlyError 展示层翻译（超时→建议错峰、重启中断→可重试等），原始异常留 title 悬浮；④**R4 inbox 生命周期**——入库成功"消费即清"（paperless-ngx [P1]）+ 启动扫描清 7 天孤儿原件（仅交付态 WEB_STATIC=1 执行，S3 M-4 防测试误删真实数据）。
+- **调研与计划**：specs/research/paper-management-survey.md（paperless-ngx usage/api.md + RAGFlow SDK 源码核实；D 线 [D1]–[D9] 缺口实锤：error 任务 UI 隐身/重试孤岛/inbox 堆积/孤儿进程/原因不可读）+ specs/plans/paper-batch-upload.plan.md。
+- **S4 安全专项**（上传属敏感代码）：2 Medium 全修——M-1 逐文件异常 detail 改走 sanitize_error（补 Unix/Windows 绝对路径打码规则，防路径/schema 回显）；M-2 新增 read_upload_capped 先验 size 后读（防"先整读后校验"OOM，单篇端点同修，闭环 M4-02 记池项）；3 Low——L-1 _safe_basename 文件名净化（NFC/控制字符/Windows 保留字符/字节截断）、L-2 deploy.md 补反代 client_max_body_size、L-3 任务区 SQL LIMIT 200。
+- **S3 代码审查**：Blocker 0 / Major 0 / Minor 5 全修（批 worker 循环兜底、seen.add 时序与孤儿 inbox 清理、_safe_basename Windows 保留字符、测试 DATA_DIR 隔离 tmp_path + inbox 清理加 web_static 门、plan 文档漂移）+ Nit 5 修 4。全量 **251 passed**；npm build 成功。
+- **报告**：specs/reviews/paper-batch-upload.review.md（Blocker 0/Major 0/Minor 5 全修）、specs/reviews/paper-batch-upload.security.md（有条件通过→修复后升级通过，复测结果已回填）。
+
 
 
 
