@@ -228,6 +228,15 @@
 - **报告**：specs/reviews/paper-batch-upload.review.md（Blocker 0/Major 0/Minor 5 全修）、specs/reviews/paper-batch-upload.security.md（有条件通过→修复后升级通过，复测结果已回填）。
 - **部署实录**（2026-11-17 11:44）：容器 master 曾被并行会话未提交的 reports/ablation.md 挡 updateInstead 推送——经**临时分支 deploy-20261117 推送 + 容器 ff 合并**部署（零触碰其未提交文件，合并后分支已删）+ start_server.sh 重启加载新后端；上线验证：index.html 引用新 bundle index-BBhkejyl.js、批量端点未登录访问 401（存在且鉴权门正常）。此绕行范式可复用（推送被拒时"临时分支 + ff 合并"，不触碰并行会话未提交文件）。
 
+## 2026-11-17｜feat：M6 打磨收官——README 定稿+演示录屏脚本+财报泛化包零样本评测（tag m6，项目全部里程碑 M0–M6 完成）
+
+- **6.1 README 定稿**（调研 m6-polish-survey.md M/N 线：ragflow/open-webui/anything-llm/FastGPT/MaxKB/Best-README-Template 六项目 README 原文核实）：章节按高星实证骨架（logo/badges/**首屏截图四宫格**/可折叠 TOC/**两条命令跑通**/架构图/评测小表/FAQ/License）；**两条命令包装**（①git clone+cp .env.example ②bash scripts/start_server.sh——仿 AnythingLLM"先填 .env 再启动"）；架构图 docs/images/architecture.svg（双端拓扑+六层管线，静态 SVG——5 项目均不用 mermaid）；.env.example 补齐 M4/M5 全字段（ADMIN_PASSWORD/JWT_SECRET/WEB_STATIC/GEN_MAX_TOKENS——S4 遗留⑤闭环）；LICENSE(MIT)+docs/deploy.md（服务器栈前置+端口边界）+docs/finance-generalization.md（零样本口径+OmniDocBench 预检清单）。
+- **6.2 演示录屏（脚本化交付）**：scripts/demo_record.py——Playwright 分镜录制（登录→论文库→SSE 流式+思考三态→**引用 bbox 黄金位**→多模态题→评测看板定格，webm 产出；lobe-chat 的 user-attachments mp4 内联惯例 [N3]）——**需执行一次产出视频**（DEMO_PASSWORD=… python scripts/demo_record.py）。
+- **6.2 财报泛化包（零样本跨域，BEIR 方法学）**：5 篇 A 股年报下载（巨潮公开披露：茅台/招行/司尔特+补海目星/麒麟信安，跨行业+OmniDocBench 版式预检清单）；**司尔特入库成功**（832 块 text/12 图）+**茅台入库**（764 块 text/2 图——300 页大财报全链路首通）；零样本评测 8/8（6 表格题正常应答无误拒+2 反事实拒答正确）——财报域泛化核心验收达成；**招行年报 MinerU 解析超时如实记录**（300+ 页 1h/4h 两档均超——大财报算力边界，后续优化位）。
+- **论文库交互补全**：论文重命名端点（PATCH /api/papers/{doc_id}/title）+前端"改名"模态框；未分类语义对齐（NULL 论文归入未分类节点——前端点"未分类"标签过滤不到的根因修复）。
+- **过程深坑实录**（财报大 PDF 与并行会话交叉实测）：ingest reused 作用域回归（M2 潜伏，图像入库必炸）+后台线程事件循环冲突+pymysql 2.x begin() 语义（显式事务改造）+SameFileError+**多实例竞争**（跨进程锁无效→8 实例互踩→清场单实例纪律）+招行年报 MinerU 卡死（GPU 竞争雪上加霜）——全部有 commit 与诊断记录。
+- **测试**：212→251 passed（含并行会话与回收站 TDD 用例）。**M5 评测数据**：五套件 4293 条指标+消融结论（A 0.186→C 0.354→D 0.495）+BEIR SciFact 0.736——详见上方 M5 条目与 reports/ablation.md。
+
 
 
 
